@@ -1,0 +1,19 @@
+[package]
+name = "rsh"
+version = "0.1.0-alpha"
+authors = ["Avvo Infrastructure Team <infrastructure@avvo.com>"]
+
+[dependencies]
+base64 = "0.6"
+futures = "0.1"
+getopts = "0.2"
+reqwest = "0.7"
+rpassword = "1.0"
+termion = "1.5"
+tokio-core = "0.1"
+serde = "1.0"
+serde_json = "1.0"
+serde_derive = "1.0"
+url = "1.5"
+url_serde = "0.2"
+websocket = "0.20"
