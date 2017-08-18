@@ -628,11 +628,11 @@ fn main() {
         let (sender, receiver) = futures::sync::mpsc::channel(0);
         std::thread::spawn(move || {
             let mut stdin = std::io::stdin();
-            let mut buffer = [0];
+            let mut buffer = [0; 4096];
             let mut sink = sender.wait();
             loop {
-                stdin.read(&mut buffer[..]).unwrap();
-                let message = base64::encode(&buffer);
+                let read = stdin.read(&mut buffer[..]).unwrap();
+                let message = base64::encode(&buffer[0..read]);
                 sink.send(websocket::OwnedMessage::Text(message)).unwrap();
             }
         });
