@@ -7,6 +7,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
+extern crate shell_escape;
 extern crate termion;
 extern crate tokio_core;
 extern crate url;
@@ -264,12 +265,12 @@ struct ContainerExec {
 }
 
 impl ContainerExec {
-    fn new(command: Vec<String>) -> ContainerExec {
+    fn new(command: Vec<String>, tty: bool) -> ContainerExec {
         ContainerExec {
             attach_stdin: true,
             attach_stdout: true,
             command,
-            tty: true,
+            tty,
         }
     }
 }
@@ -523,8 +524,11 @@ fn prompt_with_default(prompt: &str, default: Option<String>) -> std::io::Result
 fn main() {
     let mut opts = getopts::Options::new();
     opts.parsing_style(getopts::ParsingStyle::StopAtFirstFree);
-    opts.optflag("h", "help", "print this message");
-    opts.optflag("V", "version", "print the version");
+    opts.optflag("h", "help", "Print this message and exit");
+    opts.optflag("V", "version", "Display the version number and exit");
+
+    opts.optflag("T", "", "Disable pseudo-terminal allocation");
+    opts.optflag("t", "", "Force pseudo-terminal allocation");
 
     let mut args: Vec<String> = std::env::args().collect();
     let program = args.remove(0);
@@ -587,9 +591,9 @@ fn main() {
         match client.executeable_container(&mut ucl) {
             Ok(v) => break v,
             Err(Error::Unauthorized) if tries == 0 => {
-                let user = prompt_with_default("User", std::env::var("USER").ok())
+                let user = prompt_with_default("Rancher User", std::env::var("USER").ok())
                     .expect("couldn't get user");
-                let password = rpassword::prompt_password_stdout(&"Password: ").expect(
+                let password = rpassword::prompt_password_stdout(&"Rancher Password: ").expect(
                     "couldn't get password",
                 );
                 match client.ldap_auth(&ucl.url, &user, &password) {
@@ -627,20 +631,62 @@ fn main() {
         "expected executeable container",
     );
 
-    let command = vec![
+
+    let (command, close_message) = if matches.free.len() == 1 {
+        let user = if ucl.url.username().is_empty() {
+            "root"
+        } else {
+            ucl.url.username()
+        };
+        (format!("login -f {}", user), Some(format!("\nConnection to {} closed.", ucl)))
+    } else if matches.free.len() == 2 {
+        (matches.free.get(1).unwrap().clone(), None)
+    } else {
+        let vec: Vec<_> = matches.free[1..].iter().map(|s| shell_escape::escape(s.clone().into())).collect();
+        (vec.join(" "), None)
+    };
+
+    let mut command_parts = Vec::new();
+    let send_env = vec!["TERM"];
+    for var in send_env {
+        match std::env::var(var) {
+            Ok(v) => {
+                command_parts.push(format!("{}={}", var, v));
+                command_parts.push(format!("export {}", var));
+            }
+            Err(_) => (),
+        };
+    }
+    let is_tty = (termion::is_tty(&std::fs::File::create("/dev/stdout").unwrap()) || matches.opt_present("t")) && !matches.opt_present("T");
+    if is_tty {
+        match termion::terminal_size() {
+            Ok((cols, rows)) => command_parts.push(format!("stty cols {} rows {}", cols, rows)),
+            Err(_) => (),
+        };
+        command_parts.push(format!("([ -x /usr/bin/script ] && /usr/bin/script -q -c {} /dev/null || exec {})", shell_escape::escape(command.clone().into()), command));
+    } else {
+        command_parts.push(command);
+    }
+
+    let exec = vec![
         String::from("/bin/sh"),
         String::from("-c"),
-        String::from(
-            "TERM=xterm-256color; export TERM; stty cols 80 rows 24; [ -x /bin/bash ] && ([ -x /usr/bin/script ] && /usr/bin/script -q -c \"/bin/bash\" /dev/null || exec /bin/bash) || exec /bin/sh"
-        ),
+        command_parts.join("; "),
     ];
     let host_access: HostAccess = client
-        .post(execute_url, &ContainerExec::new(command))
+        .post(execute_url, &ContainerExec::new(exec, is_tty))
         .expect("execute failed");
 
     {
-        let mut stdout = std::io::stdout().into_raw_mode().unwrap();
-        stdout.flush().unwrap();
+        // raw mode will stay in effect until the raw var is dropped
+        // we otherwise don't actually need it for anything
+        let raw = if is_tty {
+            let mut stdout = std::io::stdout().into_raw_mode().unwrap();
+            stdout.flush().unwrap();
+            Some(stdout)
+        } else {
+            None
+        };
 
         let (sender, receiver) = futures::sync::mpsc::channel(0);
         std::thread::spawn(move || {
@@ -663,6 +709,7 @@ fn main() {
                 and_select(
                     stream.filter_map(|message| match message {
                         websocket::OwnedMessage::Text(txt) => {
+                            let mut stdout = std::io::stdout();
                             stdout
                                 .write(&base64::decode(&txt).expect("invalid base64"))
                                 .unwrap();
@@ -679,7 +726,17 @@ fn main() {
                 ).forward(sink)
             });
         core.run(runner).unwrap();
+
+        // don't really need to do this, but the compiler wants us to use raw
+        // for *something*
+        match raw {
+            Some(mut stdout) => stdout.flush().unwrap(),
+            None => (),
+        };
     }
 
-    println!("\nConnection to {} closed.", ucl);
+    match close_message {
+        Some(v) => println!("{}", v),
+        None => ()
+    }
 }
