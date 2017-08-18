@@ -498,6 +498,28 @@ where
     }
 }
 
+fn prompt_with_default(prompt: &str, default: Option<String>) -> std::io::Result<String> {
+    let mut stdout = std::io::stdout();
+    let mut result = String::new();
+    let prompt = match default {
+        Some(ref v) => format!("{} ({}): ", prompt, v),
+        None => format!("{}: ", prompt),
+    };
+    write!(stdout, "{}", prompt)?;
+    stdout.flush()?;
+    std::io::stdin().read_line(&mut result)?;
+    if result.chars().last() == Some('\n') {
+        result.pop();
+    }
+    if result.chars().last() == Some('\r') {
+        result.pop();
+    }
+    match (result.as_ref(), default) {
+        ("", Some(v)) => Ok(v),
+        _ => Ok(result),
+    }
+}
+
 fn main() {
     let mut opts = getopts::Options::new();
     opts.parsing_style(getopts::ParsingStyle::StopAtFirstFree);
@@ -565,17 +587,12 @@ fn main() {
         match client.executeable_container(&mut ucl) {
             Ok(v) => break v,
             Err(Error::Unauthorized) if tries == 0 => {
-                let mut stdout = std::io::stdout();
-                write!(stdout, "User: ").expect("couldn't write stdout");
-                stdout.flush().expect("couldn't write stdout");
-                let mut user = String::new();
-                std::io::stdin().read_line(&mut user).expect(
-                    "couldn't get username",
-                );
+                let user = prompt_with_default("User", std::env::var("USER").ok())
+                    .expect("couldn't get user");
                 let password = rpassword::prompt_password_stdout(&"Password: ").expect(
                     "couldn't get password",
                 );
-                match client.ldap_auth(&ucl.url, user.trim_right(), &password) {
+                match client.ldap_auth(&ucl.url, &user, &password) {
                     Ok(_) => (),
                     Err(_) => {
                         eprintln!("Authentication failed.");
