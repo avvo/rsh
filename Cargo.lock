@@ -1,6 +1,6 @@
 [root]
 name = "rsh"
-version = "0.1.0-alpha"
+version = "0.1.0-alpha2"
 dependencies = [
  "base64 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)",
