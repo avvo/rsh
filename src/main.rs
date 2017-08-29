@@ -638,7 +638,7 @@ fn main() {
         } else {
             ucl.url.username()
         };
-        (format!("login -f {}", user), Some(format!("\nConnection to {} closed.", ucl)))
+        (format!("login -p -f {}", user), Some(format!("\nConnection to {} closed.", ucl)))
     } else if matches.free.len() == 2 {
         (matches.free.get(1).unwrap().clone(), None)
     } else {
