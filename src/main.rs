@@ -8,24 +8,23 @@ extern crate serde_json;
 extern crate shell_escape;
 extern crate termion;
 extern crate tokio_core;
+extern crate url;
 extern crate websocket;
 
 use futures::future::Future;
 use futures::sink::Sink;
 use futures::stream::Stream;
 
-use std::io::Read;
-use std::io::Write;
+use std::io::{Read, Write};
 use termion::raw::IntoRawMode;
 
 mod and_select;
+mod options;
 mod prompt;
 mod rancher;
-mod ucl;
 
 use prompt::prompt_with_default;
 use rancher::{ContainerExec, HostAccess};
-use ucl::Ucl;
 
 const NAME: &'static str = env!("CARGO_PKG_NAME");
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -36,13 +35,19 @@ fn main() {
     opts.optflag("h", "help", "Print this message and exit");
     opts.optflag("V", "version", "Display the version number and exit");
 
+    opts.optopt(
+        "l",
+        "",
+        "Specifies the user to log in as on the remote machine",
+        "USER",
+    );
     opts.optflag("T", "", "Disable pseudo-terminal allocation");
-    opts.optflag("t", "", "Force pseudo-terminal allocation");
+    opts.optflagmulti("t", "", "Force pseudo-terminal allocation");
 
     let mut args: Vec<String> = std::env::args().collect();
     let program = args.remove(0);
     let brief = format!(
-        "Usage: {} [options] [scheme://][user@]host[:port]/[environment/]stack[/service] [command]",
+        "Usage: {} [options] [scheme://][user@]host[:port][[/environment]/stack]/service [command]",
         program
     );
 
@@ -62,11 +67,112 @@ fn main() {
         std::process::exit(0);
     }
 
-    let mut ucl = match matches.free.get(0).ok_or(ucl::Error::NoHost).and_then(
-        |s| {
-            Ucl::from(s)
-        },
-    ) {
+    let host = match matches.free.get(0) {
+        Some(v) => v,
+        None => {
+            println!("{}", opts.usage(&brief));
+            std::process::exit(1);
+        }
+    };
+
+    let url = match if !host.contains("://") {
+        url::Url::parse(&format!("{}://{}", options::Protocol::default(), host))
+    } else {
+        url::Url::parse(host)
+    } {
+        Ok(v) => v,
+        Err(_) => {
+            println!("{}", opts.usage(&brief));
+            std::process::exit(1);
+        }
+    };
+
+    if url.cannot_be_a_base() {
+        println!("{}", opts.usage(&brief));
+        std::process::exit(1);
+    };
+
+    let (environment, stack, service) = {
+        let mut path_segments = url.path_segments()
+            .expect("cannot-be-a-base URL bypassed check?")
+            .map(String::from);
+        let first = path_segments.next();
+        let second = path_segments.next();
+        let third = path_segments.next();
+
+        if path_segments.next().is_some() {
+            // weren't expecting another path segment
+            println!("{}", opts.usage(&brief));
+            std::process::exit(1);
+        };
+
+        match (first, second, third) {
+            (None, None, None) => (None, None, None),
+            (a @ Some(_), None, None) => (None, None, a),
+            (a @ Some(_), b @ Some(_), None) => (None, a, b),
+            (a @ Some(_), b @ Some(_), c @ Some(_)) => (a, b, c),
+            _ => panic!("didn't expect a path segment to follow None"),
+        }
+    };
+
+    let mut config_path = std::env::home_dir().unwrap_or(std::path::PathBuf::from("/"));
+    config_path.push(".rsh");
+    std::fs::create_dir_all(&config_path).expect("couldn't create config dir");
+
+    let mut option_builder = options::OptionsBuilder::default();
+
+    option_builder.protocol(match url.scheme() {
+        "http" => options::Protocol::Http,
+        "https" => options::Protocol::Https,
+        _ => {
+            println!("{}", opts.usage(&brief));
+            std::process::exit(1);
+        }
+    });
+
+    if !url.username().is_empty() {
+        option_builder.user(url.username().into());
+    } else if matches.opt_present("l") {
+        option_builder.user(matches.opt_str("l").unwrap());
+    }
+
+    if url.host_str().is_some() {
+        option_builder.host_name(url.host_str().unwrap().into());
+    }
+
+    if url.port().is_some() {
+        option_builder.port(url.port().unwrap());
+    }
+
+    if environment.is_some() {
+        option_builder.environment(environment.unwrap().into());
+    }
+
+    if stack.is_some() {
+        option_builder.stack(stack.unwrap().into());
+    }
+
+    if service.is_some() {
+        option_builder.service(service.unwrap().into());
+    }
+
+    if matches.opt_count("t") > 1 {
+        option_builder.request_tty(options::RequestTTY::Force);
+    } else if matches.opt_present("t") {
+        option_builder.request_tty(options::RequestTTY::Yes);
+    } else if matches.opt_present("T") {
+        option_builder.request_tty(options::RequestTTY::No);
+    }
+
+    if matches.free.len() > 1 {
+        let vec: Vec<_> = matches.free[1..]
+            .iter()
+            .map(|s| shell_escape::escape(s.clone().into()))
+            .collect();
+        option_builder.remote_command(vec.join(" "));
+    };
+
+    let options = match option_builder.build() {
         Ok(v) => v,
         Err(_) => {
             eprintln!("{}", opts.usage(&brief));
@@ -76,14 +182,11 @@ fn main() {
 
     let mut client = rancher::Client::new();
 
-    let mut config_path = std::env::home_dir().unwrap_or(std::path::PathBuf::from("/"));
-    config_path.push(".rsh");
-    std::fs::create_dir_all(&config_path).expect("couldn't create config dir");
-
     let mut api_key_path = config_path.clone();
-    let host = match ucl.url.port() {
-        Some(p) => format!("{}:{}", ucl.url.host().expect("expected host"), p),
-        None => format!("{}", ucl.url.host().expect("expected host")),
+    let host = if options.port == options.protocol.default_port() {
+        format!("{}", options.host_name)
+    } else {
+        format!("{}:{}", options.host_name, options.port)
     };
     api_key_path.push(host);
     match std::fs::File::open(&api_key_path).map(std::io::BufReader::new) {
@@ -98,15 +201,21 @@ fn main() {
     };
 
     let mut tries = 0;
+    let url = options.url();
     let container = loop {
-        match client.executeable_container(&mut ucl) {
+        match client.executeable_container(
+            &url,
+            &options.environment,
+            &options.stack,
+            &options.service,
+        ) {
             Ok(v) => break v,
             Err(rancher::Error::Unauthorized) if tries == 0 => {
                 let user = prompt_with_default("Rancher User", std::env::var("USER").ok())
                     .expect("couldn't get user");
                 let password = rpassword::prompt_password_stdout(&"Rancher Password: ")
                     .expect("couldn't get password");
-                match client.ldap_auth(&ucl.url, &user, &password) {
+                match client.ldap_auth(&url, &user, &password) {
                     Ok(_) => (),
                     Err(_) => {
                         eprintln!("Authentication failed.");
@@ -141,25 +250,14 @@ fn main() {
         "expected executeable container",
     );
 
-
-    let (command, close_message) = if matches.free.len() == 1 {
-        let user = if ucl.url.username().is_empty() {
-            "root"
-        } else {
-            ucl.url.username()
-        };
-        (
-            format!("login -p -f {}", user),
-            Some(format!("\nConnection to {} closed.", ucl)),
-        )
-    } else if matches.free.len() == 2 {
-        (matches.free.get(1).unwrap().clone(), None)
-    } else {
-        let vec: Vec<_> = matches.free[1..]
-            .iter()
-            .map(|s| shell_escape::escape(s.clone().into()))
-            .collect();
-        (vec.join(" "), None)
+    let (command, close_message) = match options.remote_command {
+        Some(v) => (v, None),
+        None => {
+            (
+                format!("login -p -f {}", options.user),
+                Some(format!("\nConnection to {} closed.", url)),
+            )
+        }
     };
 
     let mut command_parts = Vec::new();
@@ -173,8 +271,15 @@ fn main() {
             Err(_) => (),
         };
     }
-    let is_tty = (termion::is_tty(&std::fs::File::create("/dev/stdout").unwrap()) ||
-                      matches.opt_present("t")) && !matches.opt_present("T");
+    let is_tty = match options.request_tty {
+        options::RequestTTY::Force |
+        options::RequestTTY::Yes => true,
+        options::RequestTTY::Auto => termion::is_tty(
+            &std::fs::File::create("/dev/stdout").unwrap(),
+        ),
+        options::RequestTTY::No => false,
+    };
+
     if is_tty {
         match termion::terminal_size() {
             Ok((cols, rows)) => command_parts.push(format!("stty cols {} rows {}", cols, rows)),

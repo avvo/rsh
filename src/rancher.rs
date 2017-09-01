@@ -8,8 +8,6 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::fmt;
 
-use ucl::Ucl;
-
 #[derive(Debug)]
 pub enum Error {
     CouldNotDetermineEnvironment,
@@ -210,22 +208,26 @@ impl Client {
         Ok(())
     }
 
-    pub fn executeable_container(&self, ucl: &mut Ucl) -> Result<Container, Error> {
-        let index = self.index(&ucl.url)?;
+    pub fn executeable_container(
+        &self,
+        url: &url::Url,
+        environment: &Option<String>,
+        stack: &str,
+        service: &str,
+    ) -> Result<Container, Error> {
+        let index = self.index(&url)?;
         let projects_link = index.links.get("projects").ok_or(Error::Empty)?;
-        let project = match ucl.environment {
-            Some(ref e) => {
+        let project = match environment {
+            &Some(ref e) => {
                 self.find_in_collection(
                     projects_link,
                     |p: &Project| &p.name == e,
                 )?
             }
-            None => {
+            &None => {
                 let mut projects: Collection<Project> = self.get(&projects_link)?;
                 if projects.data.len() == 1 {
-                    let environment = projects.data.remove(0);
-                    ucl.environment = Some(environment.name.clone());
-                    environment
+                    projects.data.remove(0)
                 } else {
                     return Err(Error::CouldNotDetermineEnvironment);
                 }
@@ -234,12 +236,12 @@ impl Client {
         let stacks_link = project.links.get("stacks").ok_or(Error::Empty)?;
         let stack = self.find_in_collection(
             stacks_link,
-            |s: &Stack| s.name == ucl.stack,
+            |s: &Stack| s.name == stack,
         )?;
         let services_link = stack.links.get("services").ok_or(Error::Empty)?;
         let service = self.find_in_collection(
             services_link,
-            |s: &Service| s.name == ucl.service,
+            |s: &Service| s.name == service,
         )?;
         let instances_link = service.links.get("instances").ok_or(Error::Empty)?;
         self.find_in_collection(instances_link, |c: &Container| {
