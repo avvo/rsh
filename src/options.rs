@@ -51,15 +51,6 @@ pub enum Protocol {
     Https,
 }
 
-impl fmt::Display for Protocol {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> fmt::Result {
-        match self {
-            &Protocol::Http => "http".fmt(fmt),
-            &Protocol::Https => "https".fmt(fmt),
-        }
-    }
-}
-
 impl Protocol {
     pub fn default_port(&self) -> u16 {
         match self {
@@ -75,6 +66,15 @@ impl Default for Protocol {
     }
 }
 
+impl fmt::Display for Protocol {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> fmt::Result {
+        match self {
+            &Protocol::Http => "http".fmt(fmt),
+            &Protocol::Https => "https".fmt(fmt),
+        }
+    }
+}
+
 pub enum RequestTTY {
     Auto,
     Force,
@@ -85,6 +85,17 @@ pub enum RequestTTY {
 impl Default for RequestTTY {
     fn default() -> RequestTTY {
         RequestTTY::Auto
+    }
+}
+
+impl fmt::Display for RequestTTY {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> fmt::Result {
+        match self {
+            &RequestTTY::Auto => "auto".fmt(fmt),
+            &RequestTTY::Force => "force".fmt(fmt),
+            &RequestTTY::No => "no".fmt(fmt),
+            &RequestTTY::Yes => "yes".fmt(fmt),
+        }
     }
 }
 
@@ -207,5 +218,25 @@ impl Options {
                 self.port
             )).unwrap()
         }
+    }
+}
+
+impl fmt::Display for Options {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> fmt::Result {
+        write!(fmt, "protocol {}\n", self.protocol)?;
+        write!(fmt, "user {}\n", self.user)?;
+        write!(fmt, "hostname {}\n", self.host_name)?;
+        write!(fmt, "port {}\n", self.port)?;
+        match self.environment {
+            Some(ref v) => write!(fmt, "environment {}\n", v)?,
+            None => write!(fmt, "environment none\n")?,
+        }
+        write!(fmt, "stack {}\n", self.stack)?;
+        write!(fmt, "service {}\n", self.service)?;
+        match self.remote_command {
+            Some(ref v) => write!(fmt, "remotecommand {}\n", v)?,
+            None => write!(fmt, "remotecommand none\n")?,
+        }
+        write!(fmt, "requesttty {}", self.request_tty)
     }
 }

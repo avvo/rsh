@@ -35,6 +35,7 @@ fn main() {
     opts.optflag("h", "help", "Print this message and exit");
     opts.optflag("V", "version", "Display the version number and exit");
 
+    opts.optflag("G", "", "Print the configuration and exit");
     opts.optopt(
         "l",
         "",
@@ -179,6 +180,11 @@ fn main() {
             std::process::exit(1);
         }
     };
+
+    if matches.opt_present("G") {
+        println!("{}", options);
+        std::process::exit(0);
+    }
 
     let mut client = rancher::Client::new();
 
