@@ -256,6 +256,13 @@ fn main() {
         "expected executeable container",
     );
 
+    let is_tty = match options.request_tty {
+        options::RequestTTY::Force => true,
+        options::RequestTTY::Auto => options.remote_command.is_none(),
+        options::RequestTTY::Yes => termion::is_tty(&std::fs::File::create("/dev/stdout").unwrap()),
+        options::RequestTTY::No => false,
+    };
+
     let (command, close_message) = match options.remote_command {
         Some(v) => (v, None),
         None => {
@@ -277,14 +284,6 @@ fn main() {
             Err(_) => (),
         };
     }
-    let is_tty = match options.request_tty {
-        options::RequestTTY::Force |
-        options::RequestTTY::Yes => true,
-        options::RequestTTY::Auto => termion::is_tty(
-            &std::fs::File::create("/dev/stdout").unwrap(),
-        ),
-        options::RequestTTY::No => false,
-    };
 
     if is_tty {
         match termion::terminal_size() {
