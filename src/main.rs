@@ -42,6 +42,7 @@ fn main() {
         "Specifies the user to log in as on the remote machine",
         "USER",
     );
+    opts.optopt("p", "", "Port to connect to on the remote host", "PORT");
     opts.optflag("T", "", "Disable pseudo-terminal allocation");
     opts.optflagmulti("t", "", "Force pseudo-terminal allocation");
 
@@ -143,6 +144,15 @@ fn main() {
 
     if url.port().is_some() {
         option_builder.port(url.port().unwrap());
+    } else if matches.opt_present("p") {
+        let port_string = matches.opt_str("p").unwrap();
+        match port_string.parse() {
+            Ok(v) => option_builder.port(v),
+            Err(_) => {
+                eprintln!("Bad port '{}'.", port_string);
+                std::process::exit(1);
+            }
+        };
     }
 
     if environment.is_some() {
