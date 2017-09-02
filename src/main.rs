@@ -70,7 +70,7 @@ fn main() {
     let host = match matches.free.get(0) {
         Some(v) => v,
         None => {
-            println!("{}", opts.usage(&brief));
+            eprintln!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
     };
@@ -82,13 +82,13 @@ fn main() {
     } {
         Ok(v) => v,
         Err(_) => {
-            println!("{}", opts.usage(&brief));
+            eprintln!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
     };
 
     if url.cannot_be_a_base() {
-        println!("{}", opts.usage(&brief));
+        eprintln!("{}", opts.usage(&brief));
         std::process::exit(1);
     };
 
@@ -102,7 +102,7 @@ fn main() {
 
         if path_segments.next().is_some() {
             // weren't expecting another path segment
-            println!("{}", opts.usage(&brief));
+            eprintln!("{}", opts.usage(&brief));
             std::process::exit(1);
         };
 
@@ -125,7 +125,7 @@ fn main() {
         "http" => options::Protocol::Http,
         "https" => options::Protocol::Https,
         _ => {
-            println!("{}", opts.usage(&brief));
+            eprintln!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
     });
