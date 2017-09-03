@@ -342,6 +342,7 @@ fn main() {
         });
 
         let mut core = tokio_core::reactor::Core::new().unwrap();
+        let mut stdout = std::io::stdout();
 
         let runner = websocket::ClientBuilder::from_url(&host_access.authed_url())
             .async_connect(None, &core.handle())
@@ -350,7 +351,6 @@ fn main() {
                 and_select::new(
                     stream.filter_map(|message| match message {
                         websocket::OwnedMessage::Text(txt) => {
-                            let mut stdout = std::io::stdout();
                             stdout
                                 .write(&base64::decode(&txt).expect("invalid base64"))
                                 .unwrap();
