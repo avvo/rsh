@@ -50,7 +50,11 @@ fn main() {
     opts.optflag("q", "", "Quiet mode");
     opts.optflag("T", "", "Disable pseudo-terminal allocation");
     opts.optflagmulti("t", "", "Force pseudo-terminal allocation");
-    opts.optflagmulti("v", "", "Verbose mode. Multiple -v options increase the verbosity");
+    opts.optflagmulti(
+        "v",
+        "",
+        "Verbose mode. Multiple -v options increase the verbosity",
+    );
 
     let mut args: Vec<String> = std::env::args().collect();
     let program = args.remove(0);
