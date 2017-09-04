@@ -29,16 +29,66 @@ impl fmt::Display for BuildError {
     }
 }
 
-// pub enum LogLevel {
-//     Quiet,
-//     Fatal,
-//     Error,
-//     Info,
-//     Verbose,
-//     Debug, // Debug1
-//     Debug2,
-//     Debug3,
-// }
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub enum LogLevel {
+    Quiet,
+    Fatal,
+    Error,
+    Info,
+    Verbose,
+    Debug, // Debug1
+    Debug2,
+    Debug3,
+}
+
+impl LogLevel {
+    pub fn succ(self) -> LogLevel {
+        match self {
+            LogLevel::Quiet => LogLevel::Fatal,
+            LogLevel::Fatal => LogLevel::Error,
+            LogLevel::Error => LogLevel::Info,
+            LogLevel::Info => LogLevel::Verbose,
+            LogLevel::Verbose => LogLevel::Debug,
+            LogLevel::Debug => LogLevel::Debug2,
+            LogLevel::Debug2 => LogLevel::Debug3,
+            LogLevel::Debug3 => LogLevel::Debug3,
+        }
+    }
+
+    pub fn pred(self) -> LogLevel {
+        match self {
+            LogLevel::Quiet => LogLevel::Quiet,
+            LogLevel::Fatal => LogLevel::Quiet,
+            LogLevel::Error => LogLevel::Fatal,
+            LogLevel::Info => LogLevel::Error,
+            LogLevel::Verbose => LogLevel::Info,
+            LogLevel::Debug => LogLevel::Verbose,
+            LogLevel::Debug2 => LogLevel::Debug,
+            LogLevel::Debug3 => LogLevel::Debug2,
+        }
+    }
+}
+
+impl Default for LogLevel {
+    fn default() -> LogLevel {
+        LogLevel::Info
+    }
+}
+
+impl fmt::Display for LogLevel {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> fmt::Result {
+        match self {
+            &LogLevel::Quiet => "QUIET".fmt(fmt),
+            &LogLevel::Fatal => "FATAL".fmt(fmt),
+            &LogLevel::Error => "ERROR".fmt(fmt),
+            &LogLevel::Info => "INFO".fmt(fmt),
+            &LogLevel::Verbose => "VERBOSE".fmt(fmt),
+            &LogLevel::Debug => "DEBUG".fmt(fmt),
+            &LogLevel::Debug2 => "DEBUG2".fmt(fmt),
+            &LogLevel::Debug3 => "DEBUG3".fmt(fmt),
+        }
+    }
+}
 
 // pub enum CanonicalizeHostname {
 //     Always,
@@ -103,6 +153,7 @@ impl fmt::Display for RequestTTY {
 pub struct OptionsBuilder {
     environment: Option<String>,
     host_name: Option<String>,
+    log_level: LogLevel,
     port: Option<u16>,
     protocol: Protocol,
     remote_command: Option<String>,
@@ -118,6 +169,7 @@ impl OptionsBuilder {
         Ok(Options {
             environment: self.environment,
             host_name: self.host_name.ok_or(BuildError::MissingHostName)?,
+            log_level: self.log_level,
             port: self.port.unwrap_or(self.protocol.default_port()),
             protocol: self.protocol,
             remote_command: self.remote_command,
@@ -135,6 +187,11 @@ impl OptionsBuilder {
 
     pub fn host_name<'a>(&'a mut self, host_name: String) -> &'a mut OptionsBuilder {
         self.host_name = Some(host_name);
+        self
+    }
+
+    pub fn log_level<'a>(&'a mut self, log_level: LogLevel) -> &'a mut OptionsBuilder {
+        self.log_level = log_level;
         self
     }
 
@@ -188,7 +245,7 @@ pub struct Options {
     // pub ignore_unknown: Vec<Pattern>,
     // pub local_command: Option<String>,
     // pub log_file: Option<String>, // -E (not in config)
-    // pub log_level: LogLevel, // -q quiet -v verbose -vv debug -vvv debug2, default info
+    pub log_level: LogLevel, // -q quiet -v verbose -vv debug -vvv debug2, default info
     // pub number_of_password_prompts: u16, // default 3
     // pub permit_local_command: bool, // default false
     pub port: u16, // -p default protocol.default_port()
@@ -233,6 +290,7 @@ impl fmt::Display for Options {
         }
         write!(fmt, "stack {}\n", self.stack)?;
         write!(fmt, "service {}\n", self.service)?;
+        write!(fmt, "loglevel {}\n", self.log_level)?;
         match self.remote_command {
             Some(ref v) => write!(fmt, "remotecommand {}\n", v)?,
             None => write!(fmt, "remotecommand none\n")?,

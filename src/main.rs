@@ -1,6 +1,8 @@
 extern crate base64;
 extern crate futures;
 extern crate getopts;
+#[macro_use]
+extern crate lazy_static;
 extern crate rpassword;
 #[macro_use]
 extern crate serde_derive;
@@ -19,6 +21,8 @@ use std::io::{Read, Write};
 use termion::raw::IntoRawMode;
 
 mod and_select;
+#[macro_use]
+mod log;
 mod options;
 mod prompt;
 mod rancher;
@@ -43,8 +47,10 @@ fn main() {
         "USER",
     );
     opts.optopt("p", "", "Port to connect to on the remote host", "PORT");
+    opts.optflag("q", "", "Quiet mode");
     opts.optflag("T", "", "Disable pseudo-terminal allocation");
     opts.optflagmulti("t", "", "Force pseudo-terminal allocation");
+    opts.optflagmulti("v", "", "Verbose mode. Multiple -v options increase the verbosity");
 
     let mut args: Vec<String> = std::env::args().collect();
     let program = args.remove(0);
@@ -59,6 +65,17 @@ fn main() {
             std::process::exit(1);
         }
         Ok(matches) => matches,
+    };
+
+    if matches.opt_present("q") || matches.free.len() < 2 {
+        log::set_level(options::LogLevel::Quiet);
+    }
+
+    match matches.opt_count("v") {
+        0 => (),
+        1 => log::set_level(options::LogLevel::Debug),
+        2 => log::set_level(options::LogLevel::Debug2),
+        _ => log::set_level(options::LogLevel::Debug3),
     };
 
     if matches.opt_present("version") {
@@ -122,6 +139,10 @@ fn main() {
     std::fs::create_dir_all(&config_path).expect("couldn't create config dir");
 
     let mut option_builder = options::OptionsBuilder::default();
+
+    // log level was set as early as possible, make sure the options stay in
+    // sync
+    option_builder.log_level(log::level());
 
     option_builder.protocol(match url.scheme() {
         "http" => options::Protocol::Http,
@@ -234,7 +255,7 @@ fn main() {
                 match client.ldap_auth(&url, &user, &password) {
                     Ok(_) => (),
                     Err(_) => {
-                        eprintln!("Authentication failed.");
+                        fatal!("Authentication failed.");
                         std::process::exit(1);
                     }
                 };
@@ -249,11 +270,11 @@ fn main() {
 
             }
             Err(rancher::Error::Empty) => {
-                eprintln!("Couldn't find container.");
+                fatal!("Couldn't find container.");
                 std::process::exit(1);
             }
             Err(e) => {
-                eprintln!("{}", e);
+                fatal!("{}", e);
                 std::process::exit(1);
             }
         };
@@ -273,14 +294,9 @@ fn main() {
         options::RequestTTY::No => false,
     };
 
-    let (command, close_message) = match options.remote_command {
-        Some(v) => (v, None),
-        None => {
-            (
-                format!("login -p -f {}", options.user),
-                Some(format!("\nConnection to {} closed.", url)),
-            )
-        }
+    let command = match options.remote_command {
+        Some(ref v) => v.clone(),
+        None => format!("login -p -f {}", options.user),
     };
 
     let mut command_parts = Vec::new();
@@ -376,8 +392,5 @@ fn main() {
         };
     }
 
-    match close_message {
-        Some(v) => println!("{}", v),
-        None => (),
-    }
+    info!("\nConnection to {} closed.", options.url());
 }
