@@ -39,6 +39,12 @@ fn main() {
     opts.optflag("h", "help", "Print this message and exit");
     opts.optflag("V", "version", "Display the version number and exit");
 
+    opts.optopt(
+        "E",
+        "",
+        "Append debug logs to LOGFILE instead of standard error",
+        "LOGFILE",
+    );
     opts.optflag("G", "", "Print the configuration and exit");
     opts.optopt(
         "l",
@@ -69,17 +75,6 @@ fn main() {
             std::process::exit(1);
         }
         Ok(matches) => matches,
-    };
-
-    if matches.opt_present("q") || matches.free.len() < 2 {
-        log::set_level(options::LogLevel::Quiet);
-    }
-
-    match matches.opt_count("v") {
-        0 => (),
-        1 => log::set_level(options::LogLevel::Debug),
-        2 => log::set_level(options::LogLevel::Debug2),
-        _ => log::set_level(options::LogLevel::Debug3),
     };
 
     if matches.opt_present("version") {
@@ -136,6 +131,36 @@ fn main() {
             (a @ Some(_), b @ Some(_), c @ Some(_)) => (a, b, c),
             _ => panic!("didn't expect a path segment to follow None"),
         }
+    };
+
+    match matches.opt_str("E") {
+        Some(ref path) => {
+            let result = std::fs::OpenOptions::new().create(true).append(true).open(
+                path,
+            );
+            match result {
+                Ok(file) => log::set_device(file),
+                Err(e) => {
+                    eprintln!("Couldn't open logfile {}: {}", path, e);
+                    std::process::exit(1);
+                }
+            };
+
+            let file = std::fs::File::create(path).unwrap();
+            log::set_device(file);
+        }
+        None => (),
+    };
+
+    if matches.opt_present("q") || matches.free.len() < 2 {
+        log::set_level(options::LogLevel::Quiet);
+    }
+
+    match matches.opt_count("v") {
+        0 => (),
+        1 => log::set_level(options::LogLevel::Debug),
+        2 => log::set_level(options::LogLevel::Debug2),
+        _ => log::set_level(options::LogLevel::Debug3),
     };
 
     let mut config_path = std::env::home_dir().unwrap_or(std::path::PathBuf::from("/"));

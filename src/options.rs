@@ -33,41 +33,41 @@ impl fmt::Display for BuildError {
 pub enum LogLevel {
     Quiet,
     Fatal,
-    Error,
+    // Error,
     Info,
-    Verbose,
+    // Verbose,
     Debug, // Debug1
     Debug2,
     Debug3,
 }
 
-impl LogLevel {
-    pub fn succ(self) -> LogLevel {
-        match self {
-            LogLevel::Quiet => LogLevel::Fatal,
-            LogLevel::Fatal => LogLevel::Error,
-            LogLevel::Error => LogLevel::Info,
-            LogLevel::Info => LogLevel::Verbose,
-            LogLevel::Verbose => LogLevel::Debug,
-            LogLevel::Debug => LogLevel::Debug2,
-            LogLevel::Debug2 => LogLevel::Debug3,
-            LogLevel::Debug3 => LogLevel::Debug3,
-        }
-    }
-
-    pub fn pred(self) -> LogLevel {
-        match self {
-            LogLevel::Quiet => LogLevel::Quiet,
-            LogLevel::Fatal => LogLevel::Quiet,
-            LogLevel::Error => LogLevel::Fatal,
-            LogLevel::Info => LogLevel::Error,
-            LogLevel::Verbose => LogLevel::Info,
-            LogLevel::Debug => LogLevel::Verbose,
-            LogLevel::Debug2 => LogLevel::Debug,
-            LogLevel::Debug3 => LogLevel::Debug2,
-        }
-    }
-}
+// impl LogLevel {
+//     pub fn succ(self) -> LogLevel {
+//         match self {
+//             LogLevel::Quiet => LogLevel::Fatal,
+//             LogLevel::Fatal => LogLevel::Error,
+//             LogLevel::Error => LogLevel::Info,
+//             LogLevel::Info => LogLevel::Verbose,
+//             LogLevel::Verbose => LogLevel::Debug,
+//             LogLevel::Debug => LogLevel::Debug2,
+//             LogLevel::Debug2 => LogLevel::Debug3,
+//             LogLevel::Debug3 => LogLevel::Debug3,
+//         }
+//     }
+//
+//     pub fn pred(self) -> LogLevel {
+//         match self {
+//             LogLevel::Quiet => LogLevel::Quiet,
+//             LogLevel::Fatal => LogLevel::Quiet,
+//             LogLevel::Error => LogLevel::Fatal,
+//             LogLevel::Info => LogLevel::Error,
+//             LogLevel::Verbose => LogLevel::Info,
+//             LogLevel::Debug => LogLevel::Verbose,
+//             LogLevel::Debug2 => LogLevel::Debug,
+//             LogLevel::Debug3 => LogLevel::Debug2,
+//         }
+//     }
+// }
 
 impl Default for LogLevel {
     fn default() -> LogLevel {
@@ -80,9 +80,9 @@ impl fmt::Display for LogLevel {
         match self {
             &LogLevel::Quiet => "QUIET".fmt(fmt),
             &LogLevel::Fatal => "FATAL".fmt(fmt),
-            &LogLevel::Error => "ERROR".fmt(fmt),
+            // &LogLevel::Error => "ERROR".fmt(fmt),
             &LogLevel::Info => "INFO".fmt(fmt),
-            &LogLevel::Verbose => "VERBOSE".fmt(fmt),
+            // &LogLevel::Verbose => "VERBOSE".fmt(fmt),
             &LogLevel::Debug => "DEBUG".fmt(fmt),
             &LogLevel::Debug2 => "DEBUG2".fmt(fmt),
             &LogLevel::Debug3 => "DEBUG3".fmt(fmt),
@@ -244,7 +244,6 @@ pub struct Options {
     pub host_name: String,
     // pub ignore_unknown: Vec<Pattern>,
     // pub local_command: Option<String>,
-    // pub log_file: Option<String>, // -E (not in config)
     pub log_level: LogLevel, // -q quiet -v verbose -vv debug -vvv debug2, default info
     // pub number_of_password_prompts: u16, // default 3
     // pub permit_local_command: bool, // default false

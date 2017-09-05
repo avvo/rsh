@@ -1,85 +1,130 @@
 use std;
+use std::sync::{Arc, Mutex};
+use std::boxed::Box;
+use std::marker::Send;
+use std::io::Write;
 
 pub use options::LogLevel;
 
 lazy_static! {
-    static ref LEVEL: std::sync::Mutex<LogLevel> = std::sync::Mutex::new(LogLevel::default());
+    static ref LOGGER: Arc<Mutex<Logger>> = Arc::new(Mutex::new(Logger::default()));
+}
+
+struct Logger {
+    level: LogLevel,
+    device: Box<Write + Send>,
+}
+
+impl Logger {
+    fn log(&mut self, level: LogLevel, message: String) -> std::io::Result<()> {
+        if level <= self.level {
+            writeln!(&mut self.device, "{}", message)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn set_level(&mut self, level: LogLevel) {
+        self.level = level;
+    }
+
+    // fn increase_level(&mut self) {
+    //     self.level = self.level.succ();
+    // }
+    //
+    // fn decrease_level(&mut self) {
+    //     self.level = self.level.pred();
+    // }
+
+    fn set_device<T: Write + Send + 'static>(&mut self, device: T) {
+        self.device = Box::new(device);
+    }
+}
+
+impl Default for Logger {
+    fn default() -> Logger {
+        Logger {
+            level: LogLevel::default(),
+            device: Box::new(std::io::stderr()),
+        }
+    }
+}
+
+pub fn log(level: LogLevel, message: String) -> std::io::Result<()> {
+    let mut logger = LOGGER.lock().unwrap();
+    logger.log(level, message)
 }
 
 pub fn level() -> LogLevel {
-    *LEVEL.lock().unwrap()
+    let logger = LOGGER.lock().unwrap();
+    logger.level
 }
 
-pub fn set_level(new_level: LogLevel) {
-    let mut level = LEVEL.lock().unwrap();
-    *level = new_level;
+pub fn set_level(level: LogLevel) {
+    let mut logger = LOGGER.lock().unwrap();
+    logger.set_level(level);
 }
 
-pub fn increase_level() {
-    let mut level = LEVEL.lock().unwrap();
-    *level = level.succ();
+// pub fn increase_level() {
+//     let mut logger = LOGGER.lock().unwrap();
+//     logger.increase_level();
+// }
+//
+// pub fn decrease_level() {
+//     let mut logger = LOGGER.lock().unwrap();
+//     logger.decrease_level();
+// }
+
+pub fn set_device<T: Write + Send + 'static>(device: T) {
+    let mut logger = LOGGER.lock().unwrap();
+    logger.set_device(device);
 }
 
-pub fn decrease_level() {
-    let mut level = LEVEL.lock().unwrap();
-    *level = level.pred();
-}
+macro_rules! log(
+    ($level:expr, $($arg:tt)*) => { {
+        let message = format!($($arg)*);
+        ::log::log($level, message).unwrap();
+    } }
+);
 
 macro_rules! fatal(
     ($($arg:tt)*) => { {
-        if log::LogLevel::Fatal >= log::level() {
-            writeln!(&mut ::std::io::stderr(), $($arg)*).unwrap();
-        }
+        log!(::log::LogLevel::Fatal, $($arg)*);
     } }
 );
 
-macro_rules! error(
-    ($($arg:tt)*) => { {
-        if log::LogLevel::Error >= log::level() {
-            writeln!(&mut ::std::io::stderr(), $($arg)*).unwrap();
-        }
-    } }
-);
+// macro_rules! error(
+//     ($($arg:tt)*) => { {
+//         log!(::log::LogLevel::Error, $($arg)*);
+//     } }
+// );
 
 macro_rules! info(
     ($($arg:tt)*) => { {
-        if log::LogLevel::Info >= log::level() {
-            writeln!(&mut ::std::io::stderr(), $($arg)*).unwrap();
-        } 
+        log!(::log::LogLevel::Info, $($arg)*);
     } }
 );
 
-macro_rules! verbose(
-    ($($arg:tt)*) => { {
-        if log::LogLevel::Verbose >= log::level() {
-            writeln!(&mut ::std::io::stderr(), $($arg)*).unwrap();
-        }
-    } }
-);
+// macro_rules! verbose(
+//     ($($arg:tt)*) => { {
+//         log!(::log::LogLevel::Vebose, $($arg)*);
+//     } }
+// );
 
-macro_rules! debug(
-    ($($arg:tt)*) => { {
-        if log::LogLevel::Debug >= log::level() {
-            let message = format!($($arg)*);
-            writeln!(&mut ::std::io::stderr(), "debug1: {}", message).unwrap();
-        }
-    } }
-);
+// macro_rules! debug(
+//     ($($arg:tt)*) => { {
+//         log!(::log::LogLevel::Debug, $($arg)*);
+//     } }
+// );
 
-macro_rules! debug2(
-    ($($arg:tt)*) => { {
-        if log::LogLevel::Debug2 >= log::level() {
-            let message = format!($($arg)*);
-            writeln!(&mut ::std::io::stderr(), "debug2: {}", message).unwrap();
-        }
-    } }
-);
+// macro_rules! debug2(
+//     ($($arg:tt)*) => { {
+//         log!(::log::LogLevel::Debug2, $($arg)*);
+//     } }
+// );
 
-macro_rules! debug3(
-    ($($arg:tt)*) => { {
-        if log::LogLevel::Debug3 >= log::level() {
-            let message = format!($($arg)*);
-            writeln!(&mut ::std::io::stderr(), "debug3: {}", message).unwrap();
-        }
-    } }
-);
+// macro_rules! debug3(
+//     ($($arg:tt)*) => { {
+//         log!(::log::LogLevel::Debug3, $($arg)*);
+//     } }
+// );
