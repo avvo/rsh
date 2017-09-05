@@ -152,7 +152,7 @@ fn main() {
         None => (),
     };
 
-    if matches.opt_present("q") || matches.free.len() < 2 {
+    if matches.opt_present("q") || matches.free.len() > 1 {
         log::set_level(options::LogLevel::Quiet);
     }
 
