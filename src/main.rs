@@ -64,19 +64,19 @@ fn main() {
     opts.optflagmulti(
         "v",
         "",
-        "Verbose mode. Multiple -v options increase the verbosity",
+        "Verbose mode, multiples increase the verbosity",
     );
 
     let mut args: Vec<String> = std::env::args().collect();
     let program = args.remove(0);
     let brief = format!(
-        "Usage: {} [options] [scheme://][user@]host[:port][[/environment]/stack]/service [command]",
+        "Usage: {} [opts] [protocol://][user@]host[:port][[/env]/stack]/service [cmd]",
         program
     );
 
     let matches = match opts.parse(args) {
         Err(e) => {
-            eprintln!("{}\n\n{}", e, opts.usage(&brief));
+            eprint!("{}\n\n{}", e, opts.usage(&brief));
             std::process::exit(1);
         }
         Ok(matches) => matches,
@@ -86,14 +86,14 @@ fn main() {
         println!("{} {}", NAME, VERSION);
         std::process::exit(0);
     } else if matches.opt_present("help") {
-        println!("{}", opts.usage(&brief));
+        print!("{}", opts.usage(&brief));
         std::process::exit(0);
     }
 
     let host = match matches.free.get(0) {
         Some(v) => v,
         None => {
-            eprintln!("{}", opts.usage(&brief));
+            eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
     };
@@ -105,13 +105,13 @@ fn main() {
     } {
         Ok(v) => v,
         Err(_) => {
-            eprintln!("{}", opts.usage(&brief));
+            eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
     };
 
     if url.cannot_be_a_base() {
-        eprintln!("{}", opts.usage(&brief));
+        eprint!("{}", opts.usage(&brief));
         std::process::exit(1);
     };
 
@@ -125,7 +125,7 @@ fn main() {
 
         if path_segments.next().is_some() {
             // weren't expecting another path segment
-            eprintln!("{}", opts.usage(&brief));
+            eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         };
 
@@ -182,7 +182,7 @@ fn main() {
         "http" => options::Protocol::Http,
         "https" => options::Protocol::Https,
         _ => {
-            eprintln!("{}", opts.usage(&brief));
+            eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
     });
@@ -256,7 +256,7 @@ fn main() {
     let options = match option_builder.build() {
         Ok(v) => v,
         Err(_) => {
-            eprintln!("{}", opts.usage(&brief));
+            eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
     };

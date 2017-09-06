@@ -51,6 +51,7 @@ enum State {
     AwaitingChar,
 }
 
+#[derive(Debug)]
 enum AnsiState {
     AwaitingEscape,
     AwaitingOpen,
@@ -96,7 +97,7 @@ impl Scanner for CharScanner {
                 }
                 AnsiState::AwaitingChar => {
                     let c = buffer[self.pos];
-                    if (c >= b'0' || c <= b'9') && c == b';' {
+                    if (c >= b'0' && c <= b'9') || c == b';' {
                         self.pos += 1;
                         continue;
                     }
