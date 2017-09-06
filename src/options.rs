@@ -33,41 +33,41 @@ impl fmt::Display for BuildError {
 pub enum LogLevel {
     Quiet,
     Fatal,
-    // Error,
+    Error,
     Info,
-    // Verbose,
+    Verbose,
     Debug, // Debug1
     Debug2,
     Debug3,
 }
 
-// impl LogLevel {
-//     pub fn succ(self) -> LogLevel {
-//         match self {
-//             LogLevel::Quiet => LogLevel::Fatal,
-//             LogLevel::Fatal => LogLevel::Error,
-//             LogLevel::Error => LogLevel::Info,
-//             LogLevel::Info => LogLevel::Verbose,
-//             LogLevel::Verbose => LogLevel::Debug,
-//             LogLevel::Debug => LogLevel::Debug2,
-//             LogLevel::Debug2 => LogLevel::Debug3,
-//             LogLevel::Debug3 => LogLevel::Debug3,
-//         }
-//     }
-//
-//     pub fn pred(self) -> LogLevel {
-//         match self {
-//             LogLevel::Quiet => LogLevel::Quiet,
-//             LogLevel::Fatal => LogLevel::Quiet,
-//             LogLevel::Error => LogLevel::Fatal,
-//             LogLevel::Info => LogLevel::Error,
-//             LogLevel::Verbose => LogLevel::Info,
-//             LogLevel::Debug => LogLevel::Verbose,
-//             LogLevel::Debug2 => LogLevel::Debug,
-//             LogLevel::Debug3 => LogLevel::Debug2,
-//         }
-//     }
-// }
+impl LogLevel {
+    pub fn succ(self) -> LogLevel {
+        match self {
+            LogLevel::Quiet => LogLevel::Fatal,
+            LogLevel::Fatal => LogLevel::Error,
+            LogLevel::Error => LogLevel::Info,
+            LogLevel::Info => LogLevel::Verbose,
+            LogLevel::Verbose => LogLevel::Debug,
+            LogLevel::Debug => LogLevel::Debug2,
+            LogLevel::Debug2 => LogLevel::Debug3,
+            LogLevel::Debug3 => LogLevel::Debug3,
+        }
+    }
+
+    pub fn pred(self) -> LogLevel {
+        match self {
+            LogLevel::Quiet => LogLevel::Quiet,
+            LogLevel::Fatal => LogLevel::Quiet,
+            LogLevel::Error => LogLevel::Fatal,
+            LogLevel::Info => LogLevel::Error,
+            LogLevel::Verbose => LogLevel::Info,
+            LogLevel::Debug => LogLevel::Verbose,
+            LogLevel::Debug2 => LogLevel::Debug,
+            LogLevel::Debug3 => LogLevel::Debug2,
+        }
+    }
+}
 
 impl Default for LogLevel {
     fn default() -> LogLevel {
@@ -80,9 +80,9 @@ impl fmt::Display for LogLevel {
         match self {
             &LogLevel::Quiet => "QUIET".fmt(fmt),
             &LogLevel::Fatal => "FATAL".fmt(fmt),
-            // &LogLevel::Error => "ERROR".fmt(fmt),
+            &LogLevel::Error => "ERROR".fmt(fmt),
             &LogLevel::Info => "INFO".fmt(fmt),
-            // &LogLevel::Verbose => "VERBOSE".fmt(fmt),
+            &LogLevel::Verbose => "VERBOSE".fmt(fmt),
             &LogLevel::Debug => "DEBUG".fmt(fmt),
             &LogLevel::Debug2 => "DEBUG2".fmt(fmt),
             &LogLevel::Debug3 => "DEBUG3".fmt(fmt),
@@ -152,6 +152,7 @@ impl fmt::Display for RequestTTY {
 #[derive(Default)]
 pub struct OptionsBuilder {
     environment: Option<String>,
+    escape_char: Option<char>,
     host_name: Option<String>,
     log_level: LogLevel,
     port: Option<u16>,
@@ -168,6 +169,7 @@ impl OptionsBuilder {
         let service = self.service.ok_or(BuildError::MissingService)?;
         Ok(Options {
             environment: self.environment,
+            escape_char: self.escape_char,
             host_name: self.host_name.ok_or(BuildError::MissingHostName)?,
             log_level: self.log_level,
             port: self.port.unwrap_or(self.protocol.default_port()),
@@ -182,6 +184,11 @@ impl OptionsBuilder {
 
     pub fn environment<'a>(&'a mut self, environment: String) -> &'a mut OptionsBuilder {
         self.environment = Some(environment);
+        self
+    }
+
+    pub fn escape_char<'a>(&'a mut self, escape_char: char) -> &'a mut OptionsBuilder {
+        self.escape_char = Some(escape_char);
         self
     }
 
@@ -240,7 +247,7 @@ pub struct Options {
     // pub connection_attempts: u16, // default 1
     // pub connect_timeout: Option<u16>,
     pub environment: Option<String>, // default None (picks the first if there's only one)
-    // pub escape_char: String, // -e default "~"
+    pub escape_char: Option<char>, // -e default "~"
     pub host_name: String,
     // pub ignore_unknown: Vec<Pattern>,
     // pub local_command: Option<String>,
@@ -289,6 +296,10 @@ impl fmt::Display for Options {
         }
         write!(fmt, "stack {}\n", self.stack)?;
         write!(fmt, "service {}\n", self.service)?;
+        match self.escape_char {
+            Some(ref v) => write!(fmt, "escapechar {}\n", v)?,
+            None => write!(fmt, "escapechar none\n")?,
+        }
         write!(fmt, "loglevel {}\n", self.log_level)?;
         match self.remote_command {
             Some(ref v) => write!(fmt, "remotecommand {}\n", v)?,

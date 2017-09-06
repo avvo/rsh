@@ -28,13 +28,17 @@ impl Logger {
         self.level = level;
     }
 
-    // fn increase_level(&mut self) {
-    //     self.level = self.level.succ();
-    // }
-    //
-    // fn decrease_level(&mut self) {
-    //     self.level = self.level.pred();
-    // }
+    fn increase_level(&mut self) -> LogLevel {
+        let level = self.level.succ();
+        self.level = level;
+        level
+    }
+
+    fn decrease_level(&mut self) -> LogLevel {
+        let level = self.level.pred();
+        self.level = level;
+        level
+    }
 
     fn set_device<T: Write + Send + 'static>(&mut self, device: T) {
         self.device = Box::new(device);
@@ -65,21 +69,22 @@ pub fn set_level(level: LogLevel) {
     logger.set_level(level);
 }
 
-// pub fn increase_level() {
-//     let mut logger = LOGGER.lock().unwrap();
-//     logger.increase_level();
-// }
-//
-// pub fn decrease_level() {
-//     let mut logger = LOGGER.lock().unwrap();
-//     logger.decrease_level();
-// }
+pub fn increase_level() -> LogLevel {
+    let mut logger = LOGGER.lock().unwrap();
+    logger.increase_level()
+}
+
+pub fn decrease_level() -> LogLevel {
+    let mut logger = LOGGER.lock().unwrap();
+    logger.decrease_level()
+}
 
 pub fn set_device<T: Write + Send + 'static>(device: T) {
     let mut logger = LOGGER.lock().unwrap();
     logger.set_device(device);
 }
 
+#[macro_export]
 macro_rules! log(
     ($level:expr, $($arg:tt)*) => { {
         let message = format!($($arg)*);
@@ -87,6 +92,7 @@ macro_rules! log(
     } }
 );
 
+#[macro_export]
 macro_rules! fatal(
     ($($arg:tt)*) => { {
         log!(::log::LogLevel::Fatal, $($arg)*);
@@ -99,6 +105,7 @@ macro_rules! fatal(
 //     } }
 // );
 
+#[macro_export]
 macro_rules! info(
     ($($arg:tt)*) => { {
         log!(::log::LogLevel::Info, $($arg)*);
@@ -123,8 +130,9 @@ macro_rules! info(
 //     } }
 // );
 
-// macro_rules! debug3(
-//     ($($arg:tt)*) => { {
-//         log!(::log::LogLevel::Debug3, $($arg)*);
-//     } }
-// );
+#[macro_export]
+macro_rules! debug3(
+    ($($arg:tt)*) => { {
+        log!(::log::LogLevel::Debug3, $($arg)*);
+    } }
+);

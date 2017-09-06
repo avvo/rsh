@@ -3,6 +3,7 @@ extern crate futures;
 extern crate getopts;
 #[macro_use]
 extern crate lazy_static;
+extern crate nix;
 extern crate rpassword;
 #[macro_use]
 extern crate serde_derive;
@@ -17,12 +18,15 @@ use futures::future::Future;
 use futures::sink::Sink;
 use futures::stream::Stream;
 
+use std::ascii::AsciiExt;
 use std::io::{Read, Write};
 use termion::raw::IntoRawMode;
 
-mod and_select;
 #[macro_use]
 mod log;
+
+mod and_select;
+mod escape;
 mod options;
 mod prompt;
 mod rancher;
@@ -45,6 +49,7 @@ fn main() {
         "Append debug logs to LOGFILE instead of standard error",
         "LOGFILE",
     );
+    opts.optopt("e", "", "Sets the escape character (default: `~')", "CHAR");
     opts.optflag("G", "", "Print the configuration and exit");
     opts.optopt(
         "l",
@@ -217,6 +222,21 @@ fn main() {
         option_builder.service(service.unwrap().into());
     }
 
+    if matches.opt_present("e") {
+        let escape_str = matches.opt_str("e").unwrap();
+        if escape_str != "none" {
+            match escape_str.parse::<char>() {
+                Ok(v) if v.is_ascii() => option_builder.escape_char(v),
+                _ => {
+                    eprintln!("Bad escape character '{}'.", escape_str);
+                    std::process::exit(1);
+                }
+            };
+        }
+    } else {
+        option_builder.escape_char('~');
+    }
+
     if matches.opt_count("t") > 1 {
         option_builder.request_tty(options::RequestTTY::Force);
     } else if matches.opt_present("t") {
@@ -376,13 +396,71 @@ fn main() {
 
         let (sender, receiver) = futures::sync::mpsc::channel(0);
         std::thread::spawn(move || {
+            let mut escape_scanner = escape::scanner(options.escape_char);
             let mut stdin = std::io::stdin();
             let mut buffer = [0; 4096];
+            let mut vbuffer = std::vec::Vec::new();
             let mut sink = sender.wait();
-            loop {
+            'main: loop {
+                escape_scanner.reset();
+                let mut sent = 0;
                 let read = stdin.read(&mut buffer[..]).unwrap();
-                let message = base64::encode(&buffer[0..read]);
-                sink.send(websocket::OwnedMessage::Text(message)).unwrap();
+                while sent < read {
+                    let escape_type = escape_scanner.next_escape(&buffer, read);
+                    let bytes = match escape_type {
+                        escape::Escape::DecreaseVerbosity |
+                        escape::Escape::Help |
+                        escape::Escape::IncreaseVerbosity |
+                        escape::Escape::Itself |
+                        escape::Escape::Suspend |
+                        escape::Escape::Terminate => &buffer[sent..escape_scanner.pos() - 1],
+                        escape::Escape::Invalid => {
+                            vbuffer.clear();
+                            vbuffer.push(escape_scanner.char() as u8);
+                            vbuffer.extend(&buffer[sent..(escape_scanner.pos())]);
+                            &vbuffer[..]
+                        }
+                        escape::Escape::Literal | escape::Escape::None => {
+                            &buffer[sent..(escape_scanner.pos())]
+                        }
+                    };
+                    let message = base64::encode(bytes);
+                    sink.send(websocket::OwnedMessage::Text(message)).unwrap();
+                    sent = escape_scanner.pos();
+                    match escape_type {
+                        escape::Escape::DecreaseVerbosity => {
+                            let level = log::decrease_level();
+                            println!("{}V [LogLevel {}]\r", escape_scanner.char(), level);
+                        }
+                        escape::Escape::Help => {
+                            println!(
+                                "{0}?\r
+Supported escape sequences:\r
+ {0}.   - terminate connection\r
+ {0}V/v - decrease/increase verbosity (LogLevel)\r
+ {0}^Z  - suspend rsh\r
+ {0}?   - this message\r
+ {0}{0}   - send the escape character by typing it twice\r
+(Note that escapes are only recognized immediately after newline.)\r",
+                                escape_scanner.char()
+                            );
+                        }
+                        escape::Escape::IncreaseVerbosity => {
+                            let level = log::increase_level();
+                            println!("{}v [LogLevel {}]\r", escape_scanner.char(), level);
+                        }
+                        escape::Escape::Suspend => {
+                            nix::sys::signal::kill(
+                                nix::unistd::getpid(),
+                                Some(nix::sys::signal::Signal::SIGTSTP),
+                            ).expect("failed to suspend");
+                        }
+                        escape::Escape::Terminate => {
+                            break 'main;
+                        }
+                        _ => (),
+                    }
+                }
             }
         });
 
@@ -421,5 +499,5 @@ fn main() {
         };
     }
 
-    info!("\nConnection to {} closed.", options.url());
+    info!("\nConnection to {} closed.", url);
 }
