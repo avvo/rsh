@@ -3,6 +3,7 @@ extern crate url;
 use std;
 use std::error::Error;
 use std::fmt;
+use std::str::FromStr;
 
 #[derive(Debug)]
 pub enum BuildError {
@@ -29,14 +30,17 @@ impl fmt::Display for BuildError {
     }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug)]
+pub struct ParseError;
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum LogLevel {
     Quiet,
     Fatal,
     Error,
     Info,
     Verbose,
-    Debug, // Debug1
+    Debug,
     Debug2,
     Debug3,
 }
@@ -90,12 +94,32 @@ impl fmt::Display for LogLevel {
     }
 }
 
+impl FromStr for LogLevel {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_ref() {
+            "QUIET" => Ok(LogLevel::Quiet),
+            "FATAL" => Ok(LogLevel::Fatal),
+            "ERROR" => Ok(LogLevel::Error),
+            "INFO" => Ok(LogLevel::Info),
+            "VERBOSE" => Ok(LogLevel::Verbose),
+            "DEBUG" => Ok(LogLevel::Debug),
+            "DEBUG1" => Ok(LogLevel::Debug),
+            "DEBUG2" => Ok(LogLevel::Debug2),
+            "DEBUG3" => Ok(LogLevel::Debug3),
+            _ => Err(ParseError),
+        }
+    }
+}
+
 // pub enum CanonicalizeHostname {
 //     Always,
 //     No,
 //     Yes,
 // }
 
+#[derive(Debug, Clone, Copy)]
 pub enum Protocol {
     Http,
     Https,
@@ -125,6 +149,19 @@ impl fmt::Display for Protocol {
     }
 }
 
+impl FromStr for Protocol {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_ref() {
+            "http" => Ok(Protocol::Http),
+            "https" => Ok(Protocol::Https),
+            _ => Err(ParseError),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum RequestTTY {
     Auto,
     Force,
@@ -145,6 +182,20 @@ impl fmt::Display for RequestTTY {
             &RequestTTY::Force => "force".fmt(fmt),
             &RequestTTY::No => "no".fmt(fmt),
             &RequestTTY::Yes => "yes".fmt(fmt),
+        }
+    }
+}
+
+impl FromStr for RequestTTY {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_ref() {
+            "auto" => Ok(RequestTTY::Auto),
+            "force" => Ok(RequestTTY::Force),
+            "no" => Ok(RequestTTY::No),
+            "yes" => Ok(RequestTTY::Yes),
+            _ => Err(ParseError),
         }
     }
 }

@@ -3,6 +3,8 @@ extern crate futures;
 extern crate getopts;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate nom;
 extern crate nix;
 extern crate rpassword;
 #[macro_use]
@@ -26,8 +28,10 @@ use termion::raw::IntoRawMode;
 mod log;
 
 mod and_select;
+mod config;
 mod escape;
 mod options;
+mod pattern;
 mod prompt;
 mod rancher;
 
@@ -98,8 +102,25 @@ fn main() {
         }
     };
 
+    let mut config_dir = std::env::home_dir().unwrap_or(std::path::PathBuf::from("/"));
+    config_dir.push(".rsh");
+    std::fs::create_dir_all(&config_dir).expect("couldn't create config dir");
+    let mut config_path = config_dir.clone();
+    config_path.push("config");
+    let config: config::Config = match std::fs::File::open(&config_path).map(std::io::BufReader::new) {
+        Ok(mut reader) => {
+            let mut string = String::new();
+            reader.read_to_string(&mut string).expect(
+                "failed to read config",
+            );
+            string.parse().expect("failed to parse config")
+        }
+        Err(_) => config::Config::default(),
+    };
+
     let url = match if !host.contains("://") {
-        url::Url::parse(&format!("{}://{}", options::Protocol::default(), host))
+        let protocol = config.protocol(host).unwrap_or(options::Protocol::default());
+        url::Url::parse(&format!("{}://{}", protocol, host))
     } else {
         url::Url::parse(host)
     } {
@@ -131,6 +152,7 @@ fn main() {
 
         match (first, second, third) {
             (None, None, None) => (None, None, None),
+            (Some(ref a), None, None) if a.is_empty() => (None, None, None),
             (a @ Some(_), None, None) => (None, None, a),
             (a @ Some(_), b @ Some(_), None) => (None, a, b),
             (a @ Some(_), b @ Some(_), c @ Some(_)) => (a, b, c),
@@ -157,6 +179,10 @@ fn main() {
         None => (),
     };
 
+    if let Some(value) = config.log_level(host) {
+        log::set_level(value);
+    }
+
     if matches.opt_present("q") || matches.free.len() > 1 {
         log::set_level(options::LogLevel::Quiet);
     }
@@ -167,10 +193,6 @@ fn main() {
         2 => log::set_level(options::LogLevel::Debug2),
         _ => log::set_level(options::LogLevel::Debug3),
     };
-
-    let mut config_path = std::env::home_dir().unwrap_or(std::path::PathBuf::from("/"));
-    config_path.push(".rsh");
-    std::fs::create_dir_all(&config_path).expect("couldn't create config dir");
 
     let mut option_builder = options::OptionsBuilder::default();
 
@@ -189,16 +211,16 @@ fn main() {
 
     if !url.username().is_empty() {
         option_builder.user(url.username().into());
-    } else if matches.opt_present("l") {
-        option_builder.user(matches.opt_str("l").unwrap());
+    } else if let Some(value) = matches.opt_str("l").or_else(|| config.user(host)) {
+        option_builder.user(value);
     }
 
-    if url.host_str().is_some() {
-        option_builder.host_name(url.host_str().unwrap().into());
+    if let Some(value) = config.host_name(host).or_else(|| url.host_str().map(std::convert::Into::into)) {
+        option_builder.host_name(value);
     }
 
-    if url.port().is_some() {
-        option_builder.port(url.port().unwrap());
+    if let Some(value) = url.port() {
+        option_builder.port(value);
     } else if matches.opt_present("p") {
         let port_string = matches.opt_str("p").unwrap();
         match port_string.parse() {
@@ -208,22 +230,23 @@ fn main() {
                 std::process::exit(1);
             }
         };
+    } else if let Some(value) = config.port(host) {
+        option_builder.port(value);
     }
 
-    if environment.is_some() {
-        option_builder.environment(environment.unwrap().into());
+    if let Some(value) = environment.or_else(|| config.environment(host)) {
+        option_builder.environment(value.into());
     }
 
-    if stack.is_some() {
-        option_builder.stack(stack.unwrap().into());
+    if let Some(value) = stack.or_else(|| config.stack(host)) {
+        option_builder.stack(value.into());
     }
 
-    if service.is_some() {
-        option_builder.service(service.unwrap().into());
+    if let Some(value) = service.or_else(|| config.service(host)) {
+        option_builder.service(value.into());
     }
 
-    if matches.opt_present("e") {
-        let escape_str = matches.opt_str("e").unwrap();
+    if let Some(escape_str) = matches.opt_str("e") {
         if escape_str != "none" {
             match escape_str.parse::<char>() {
                 Ok(v) if v.is_ascii() => option_builder.escape_char(v),
@@ -234,7 +257,7 @@ fn main() {
             };
         }
     } else {
-        option_builder.escape_char('~');
+        option_builder.escape_char(config.escape_char(host).unwrap_or('~'));
     }
 
     if matches.opt_count("t") > 1 {
@@ -243,6 +266,8 @@ fn main() {
         option_builder.request_tty(options::RequestTTY::Yes);
     } else if matches.opt_present("T") {
         option_builder.request_tty(options::RequestTTY::No);
+    } else if let Some(value) = config.request_tty(host) {
+        option_builder.request_tty(value);
     }
 
     if matches.free.len() > 1 {
@@ -251,6 +276,8 @@ fn main() {
             .map(|s| shell_escape::escape(s.clone().into()))
             .collect();
         option_builder.remote_command(vec.join(" "));
+    } else if let Some(value) = config.remote_command(host) {
+        option_builder.remote_command(value);
     };
 
     let options = match option_builder.build() {
@@ -268,7 +295,7 @@ fn main() {
 
     let mut client = rancher::Client::new();
 
-    let mut api_key_path = config_path.clone();
+    let mut api_key_path = config_dir.clone();
     let host = if options.port == options.protocol.default_port() {
         format!("{}", options.host_name)
     } else {
