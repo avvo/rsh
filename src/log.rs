@@ -118,11 +118,12 @@ macro_rules! info(
 //     } }
 // );
 
-// macro_rules! debug(
-//     ($($arg:tt)*) => { {
-//         log!(::log::LogLevel::Debug, $($arg)*);
-//     } }
-// );
+#[macro_export]
+macro_rules! debug(
+    ($($arg:tt)*) => { {
+        log!(::log::LogLevel::Debug, $($arg)*);
+    } }
+);
 
 // macro_rules! debug2(
 //     ($($arg:tt)*) => { {

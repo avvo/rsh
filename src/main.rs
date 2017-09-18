@@ -76,10 +76,21 @@ fn main() {
 
     let matches = match opts.parse(args) {
         Err(e) => {
-            eprint!("{}\n\n{}", e, opts.usage(&brief));
+            eprint!("{}\n{}", e, opts.usage(&brief));
             std::process::exit(1);
         }
         Ok(matches) => matches,
+    };
+
+    if matches.opt_present("q") || matches.free.len() > 1 {
+        log::set_level(options::LogLevel::Quiet);
+    }
+
+    match matches.opt_count("v") {
+        0 => (),
+        1 => log::set_level(options::LogLevel::Debug),
+        2 => log::set_level(options::LogLevel::Debug2),
+        _ => log::set_level(options::LogLevel::Debug3),
     };
 
     if matches.opt_present("version") {
@@ -93,6 +104,7 @@ fn main() {
     let host = match matches.free.get(0) {
         Some(v) => v,
         None => {
+            debug!("Missing host.");
             eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
@@ -138,6 +150,10 @@ fn main() {
             Err(_) => config::Config::default(),
         };
 
+    if let Some(value) = config.log_level(host) {
+        log::set_level(value);
+    }
+
     let url = match if !host.contains("://") {
         let protocol = config.protocol(host).unwrap_or(
             options::Protocol::default(),
@@ -148,12 +164,14 @@ fn main() {
     } {
         Ok(v) => v,
         Err(_) => {
+            debug!("Error parsing host.");
             eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
     };
 
     if url.cannot_be_a_base() {
+        debug!("Error parsing host, non-base URL.");
         eprint!("{}", opts.usage(&brief));
         std::process::exit(1);
     };
@@ -168,6 +186,7 @@ fn main() {
 
         if path_segments.next().is_some() {
             // weren't expecting another path segment
+            debug!("Error parsing host, too many path segments.");
             eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         };
@@ -201,21 +220,6 @@ fn main() {
         None => (),
     };
 
-    if let Some(value) = config.log_level(host) {
-        log::set_level(value);
-    }
-
-    if matches.opt_present("q") || matches.free.len() > 1 {
-        log::set_level(options::LogLevel::Quiet);
-    }
-
-    match matches.opt_count("v") {
-        0 => (),
-        1 => log::set_level(options::LogLevel::Debug),
-        2 => log::set_level(options::LogLevel::Debug2),
-        _ => log::set_level(options::LogLevel::Debug3),
-    };
-
     let mut option_builder = options::OptionsBuilder::default();
 
     // log level was set as early as possible, make sure the options stay in
@@ -226,6 +230,7 @@ fn main() {
         "http" => options::Protocol::Http,
         "https" => options::Protocol::Https,
         _ => {
+            debug!("Unsupported protocol.");
             eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
@@ -307,7 +312,13 @@ fn main() {
 
     let options = match option_builder.build() {
         Ok(v) => v,
-        Err(_) => {
+        Err(options::BuildError::MissingHostName) => {
+            debug!("Missing host name.");
+            eprint!("{}", opts.usage(&brief));
+            std::process::exit(1);
+        }
+        Err(options::BuildError::MissingService) => {
+            debug!("Missing service.");
             eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
