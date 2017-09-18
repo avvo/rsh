@@ -193,8 +193,8 @@ impl FromStr for RequestTTY {
         match s.to_lowercase().as_ref() {
             "auto" => Ok(RequestTTY::Auto),
             "force" => Ok(RequestTTY::Force),
-            "no" => Ok(RequestTTY::No),
-            "yes" => Ok(RequestTTY::Yes),
+            "no" | "false" => Ok(RequestTTY::No),
+            "yes" | "true" => Ok(RequestTTY::Yes),
             _ => Err(ParseError),
         }
     }

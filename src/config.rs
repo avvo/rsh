@@ -1,20 +1,14 @@
 extern crate nom;
 
-use std;
 use std::str::FromStr;
 
-use options;
 pub use options::{LogLevel, Protocol, RequestTTY};
 use pattern;
 
 #[derive(Debug)]
 pub enum Error {
-    CharError(std::char::ParseCharError),
-    IntError(std::num::ParseIntError),
-    OptionError(options::ParseError),
+    OptionError(String, String),
     ParseError(nom::ErrorKind),
-    PatternError(pattern::Error),
-    StringError(std::string::ParseError),
     UnexpectedEnd,
     UnknownOption(String),
 }
@@ -29,12 +23,7 @@ macro_rules! from {
     };
 }
 
-from!(std::char::ParseCharError => Error, Error::CharError);
-from!(std::num::ParseIntError => Error, Error::IntError);
-from!(options::ParseError => Error, Error::OptionError);
 from!(nom::ErrorKind => Error, Error::ParseError);
-from!(pattern::Error => Error, Error::PatternError);
-from!(std::string::ParseError => Error, Error::StringError);
 
 #[derive(Debug)]
 pub struct Config {
@@ -80,10 +69,23 @@ impl FromStr for Config {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match pairs(s) {
+        match config_file(s) {
             nom::IResult::Done(_, pairs) => build_config(pairs),
             nom::IResult::Error(e) => Err(Error::from(e)),
             nom::IResult::Incomplete(_) => Err(Error::UnexpectedEnd),
+        }
+    }
+}
+
+macro_rules! assign {
+    ( $name:expr, $lhs:expr => $rhs:expr ) => {
+        {
+            match $rhs.parse() {
+                Ok(v) => $lhs = Some(v),
+                Err(_) => {
+                    return Err(Error::OptionError($name.into(), $rhs.into()));
+                }
+            };
         }
     }
 }
@@ -95,19 +97,22 @@ fn build_config(pairs: Vec<(&str, &str)>) -> Result<Config, Error> {
         match key.to_lowercase().as_ref() {
             "host" => {
                 sections.push(current);
-                current = Section::new(value.parse()?);
+                match value.parse() {
+                    Ok(v) => current = Section::new(v),
+                    Err(_) => return Err(Error::OptionError(key.into(), value.into())),
+                };
             }
-            "environment" => current.environment = Some(value.parse()?),
-            "escapechar" => current.escape_char = Some(value.parse()?),
-            "hostname" => current.host_name = Some(value.parse()?),
-            "loglevel" => current.log_level = Some(value.parse()?),
-            "port" => current.port = Some(value.parse()?),
-            "protocol" => current.protocol = Some(value.parse()?),
-            "remotecommand" => current.remote_command = Some(value.parse()?),
-            "requesttty" => current.request_tty = Some(value.parse()?),
-            "service" => current.service = Some(value.parse()?),
-            "stack" => current.stack = Some(value.parse()?),
-            "user" => current.user = Some(value.parse()?),
+            "environment" => assign!(key, current.environment => value),
+            "escapechar" => assign!(key, current.escape_char => value),
+            "hostname" => assign!(key, current.host_name => value),
+            "loglevel" => assign!(key, current.log_level => value),
+            "port" => assign!(key, current.port => value),
+            "protocol" => assign!(key, current.protocol => value),
+            "remotecommand" => assign!(key, current.remote_command => value),
+            "requesttty" => assign!(key, current.request_tty => value),
+            "service" => assign!(key, current.service => value),
+            "stack" => assign!(key, current.stack => value),
+            "user" => assign!(key, current.user => value),
             _ => return Err(Error::UnknownOption(key.into())),
         }
     }
@@ -138,6 +143,12 @@ impl Section {
         section
     }
 }
+
+named!(config_file(&str) -> Vec<(&str, &str)>, do_parse!(
+    res: call!(pairs) >>
+    eof!() >>
+    (res)
+));
 
 named!(pairs(&str) -> Vec<(&str, &str)>, many0!(do_parse!(
     blank >>

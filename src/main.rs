@@ -110,10 +110,22 @@ fn main() {
     let config: config::Config = match std::fs::File::open(&config_path).map(std::io::BufReader::new) {
         Ok(mut reader) => {
             let mut string = String::new();
-            reader.read_to_string(&mut string).expect(
-                "failed to read config",
-            );
-            string.parse().expect("failed to parse config")
+            reader.read_to_string(&mut string).expect("failed to read config");
+            match string.parse() {
+                Ok(v) => v,
+                Err(config::Error::OptionError(key, value)) => {
+                    fatal!("{}: Bad configuration option: \"{}\" for {}", config_path.to_string_lossy(), value, key);
+                    std::process::exit(1);
+                }
+                Err(config::Error::UnknownOption(key)) => {
+                    fatal!("{}: Bad configuration option: {}", config_path.to_string_lossy(), key);
+                    std::process::exit(1);
+                }
+                _ => {
+                    fatal!("{}: Error parsing config.", config_path.to_string_lossy());
+                    std::process::exit(1);
+                }
+            }
         }
         Err(_) => config::Config::default(),
     };
@@ -168,7 +180,7 @@ fn main() {
             match result {
                 Ok(file) => log::set_device(file),
                 Err(e) => {
-                    eprintln!("Couldn't open logfile {}: {}", path, e);
+                    fatal!("Couldn't open logfile {}: {}", path, e);
                     std::process::exit(1);
                 }
             };
