@@ -48,7 +48,7 @@ impl Pattern {
                         current -= 1;
                         token = tokens.next();
                         if token.is_none() {
-                            return true
+                            return true;
                         }
                     }
                 }
@@ -121,7 +121,7 @@ impl FromStr for PatternList {
             } else {
                 patterns.push(PatternListEntry::Positive(substr.parse()?))
             }
-        };
+        }
         if patterns.is_empty() {
             Err(Error::EmptyPattern)
         } else {

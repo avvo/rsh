@@ -65,11 +65,7 @@ fn main() {
     opts.optflag("q", "", "Quiet mode");
     opts.optflag("T", "", "Disable pseudo-terminal allocation");
     opts.optflagmulti("t", "", "Force pseudo-terminal allocation");
-    opts.optflagmulti(
-        "v",
-        "",
-        "Verbose mode, multiples increase the verbosity",
-    );
+    opts.optflagmulti("v", "", "Verbose mode, multiples increase the verbosity");
 
     let mut args: Vec<String> = std::env::args().collect();
     let program = args.remove(0);
@@ -107,31 +103,45 @@ fn main() {
     std::fs::create_dir_all(&config_dir).expect("couldn't create config dir");
     let mut config_path = config_dir.clone();
     config_path.push("config");
-    let config: config::Config = match std::fs::File::open(&config_path).map(std::io::BufReader::new) {
-        Ok(mut reader) => {
-            let mut string = String::new();
-            reader.read_to_string(&mut string).expect("failed to read config");
-            match string.parse() {
-                Ok(v) => v,
-                Err(config::Error::OptionError(key, value)) => {
-                    fatal!("{}: Bad configuration option: \"{}\" for {}", config_path.to_string_lossy(), value, key);
-                    std::process::exit(1);
-                }
-                Err(config::Error::UnknownOption(key)) => {
-                    fatal!("{}: Bad configuration option: {}", config_path.to_string_lossy(), key);
-                    std::process::exit(1);
-                }
-                _ => {
-                    fatal!("{}: Error parsing config.", config_path.to_string_lossy());
-                    std::process::exit(1);
+    let config: config::Config =
+        match std::fs::File::open(&config_path).map(std::io::BufReader::new) {
+            Ok(mut reader) => {
+                let mut string = String::new();
+                reader.read_to_string(&mut string).expect(
+                    "failed to read config",
+                );
+                match string.parse() {
+                    Ok(v) => v,
+                    Err(config::Error::OptionError(key, value)) => {
+                        fatal!(
+                            "{}: Bad configuration option: \"{}\" for {}",
+                            config_path.to_string_lossy(),
+                            value,
+                            key
+                        );
+                        std::process::exit(1);
+                    }
+                    Err(config::Error::UnknownOption(key)) => {
+                        fatal!(
+                            "{}: Bad configuration option: {}",
+                            config_path.to_string_lossy(),
+                            key
+                        );
+                        std::process::exit(1);
+                    }
+                    _ => {
+                        fatal!("{}: Error parsing config.", config_path.to_string_lossy());
+                        std::process::exit(1);
+                    }
                 }
             }
-        }
-        Err(_) => config::Config::default(),
-    };
+            Err(_) => config::Config::default(),
+        };
 
     let url = match if !host.contains("://") {
-        let protocol = config.protocol(host).unwrap_or(options::Protocol::default());
+        let protocol = config.protocol(host).unwrap_or(
+            options::Protocol::default(),
+        );
         url::Url::parse(&format!("{}://{}", protocol, host))
     } else {
         url::Url::parse(host)
@@ -227,7 +237,10 @@ fn main() {
         option_builder.user(value);
     }
 
-    if let Some(value) = config.host_name(host).or_else(|| url.host_str().map(std::convert::Into::into)) {
+    if let Some(value) = config.host_name(host).or_else(|| {
+        url.host_str().map(std::convert::Into::into)
+    })
+    {
         option_builder.host_name(value);
     }
 
