@@ -92,8 +92,10 @@ pub fn set_device<T: Write + Send + 'static>(device: T) {
 #[macro_export]
 macro_rules! log(
     ($level:expr, $($arg:tt)*) => { {
-        let message = format!($($arg)*);
-        ::log::log($level, message).unwrap();
+        if $level <= ::log::level() {
+            let message = format!($($arg)*);
+            ::log::log($level, message).unwrap();
+        }
     } }
 );
 
