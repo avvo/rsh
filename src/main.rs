@@ -104,17 +104,20 @@ fn main() {
     let host = match matches.free.get(0) {
         Some(v) => v,
         None => {
-            debug!("Missing host.");
+            verbose!("Missing host.");
             eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
     };
+
+    verbose!("{} {}", NAME, VERSION);
 
     let mut config_dir = std::env::home_dir().unwrap_or(std::path::PathBuf::from("/"));
     config_dir.push(".rsh");
     std::fs::create_dir_all(&config_dir).expect("couldn't create config dir");
     let mut config_path = config_dir.clone();
     config_path.push("config");
+    debug!("Reading configuration data {}", config_path.to_string_lossy());
     let config: config::Config =
         match std::fs::File::open(&config_path).map(std::io::BufReader::new) {
             Ok(mut reader) => {
@@ -164,14 +167,14 @@ fn main() {
     } {
         Ok(v) => v,
         Err(_) => {
-            debug!("Error parsing host.");
+            verbose!("Error parsing host.");
             eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
     };
 
     if url.cannot_be_a_base() {
-        debug!("Error parsing host, non-base URL.");
+        verbose!("Error parsing host, non-base URL.");
         eprint!("{}", opts.usage(&brief));
         std::process::exit(1);
     };
@@ -186,7 +189,7 @@ fn main() {
 
         if path_segments.next().is_some() {
             // weren't expecting another path segment
-            debug!("Error parsing host, too many path segments.");
+            verbose!("Error parsing host, too many path segments.");
             eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         };
@@ -230,7 +233,7 @@ fn main() {
         "http" => options::Protocol::Http,
         "https" => options::Protocol::Https,
         _ => {
-            debug!("Unsupported protocol.");
+            verbose!("Unsupported protocol.");
             eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
@@ -313,12 +316,12 @@ fn main() {
     let options = match option_builder.build() {
         Ok(v) => v,
         Err(options::BuildError::MissingHostName) => {
-            debug!("Missing host name.");
+            verbose!("Missing host name.");
             eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
         Err(options::BuildError::MissingService) => {
-            debug!("Missing service.");
+            verbose!("Missing service.");
             eprint!("{}", opts.usage(&brief));
             std::process::exit(1);
         }
@@ -338,6 +341,7 @@ fn main() {
         format!("{}:{}", options.host_name, options.port)
     };
     api_key_path.push(host);
+    debug!("Reading Rancher API key from {}", api_key_path.to_string_lossy());
     match std::fs::File::open(&api_key_path).map(std::io::BufReader::new) {
         Ok(mut reader) => {
             let mut string = String::new();
@@ -345,8 +349,11 @@ fn main() {
                 "failed to read api key",
             );
             client.api_key = serde_json::from_str(&string).expect("failed to parse json");
+            if let Some(ref key) = client.api_key {
+                debug!("Using Rancher API key {}", key.public_value);
+            }
         }
-        Err(_) => (),
+        Err(_) => debug!("{} No such file or directory", api_key_path.to_string_lossy()),
     };
 
     let mut tries = 0;
@@ -360,6 +367,7 @@ fn main() {
         ) {
             Ok(v) => break v,
             Err(rancher::Error::Unauthorized) if tries == 0 => {
+                debug2!("Received Unauthorized, attempting authentication");
                 let user = prompt_with_default("Rancher User", std::env::var("USER").ok())
                     .expect("couldn't get user");
                 let password = rpassword::prompt_password_stdout(&"Rancher Password: ")
@@ -371,6 +379,7 @@ fn main() {
                         std::process::exit(1);
                     }
                 };
+                debug!("Writing {}", api_key_path.to_string_lossy());
                 let json_string =
                     serde_json::to_string(&client.api_key).expect("failed to construct json");
                 let mut writer = std::fs::File::create(&api_key_path)
@@ -442,6 +451,8 @@ fn main() {
         String::from("-c"),
         command_parts.join("; "),
     ];
+    debug!("Making execute request");
+    debug3!("Using command {:?} and is_tty: {}", exec, is_tty);
     let host_access: HostAccess = client
         .post(execute_url, &ContainerExec::new(exec, is_tty))
         .expect("execute failed");
@@ -450,6 +461,7 @@ fn main() {
         // raw mode will stay in effect until the raw var is dropped
         // we otherwise don't actually need it for anything
         let raw = if is_tty {
+            debug3!("Entering raw mode");
             let mut stdout = std::io::stdout().into_raw_mode().unwrap();
             stdout.flush().unwrap();
             Some(stdout)
@@ -530,6 +542,7 @@ Supported escape sequences:\r
         let mut core = tokio_core::reactor::Core::new().unwrap();
         let mut stdout = std::io::stdout();
 
+        debug!("Connecting to websocket {}\r", host_access.url);
         let runner = websocket::ClientBuilder::from_url(&host_access.authed_url())
             .async_connect(None, &core.handle())
             .and_then(|(duplex, _)| {

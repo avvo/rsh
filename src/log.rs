@@ -18,7 +18,12 @@ struct Logger {
 impl Logger {
     fn log(&mut self, level: LogLevel, message: String) -> std::io::Result<()> {
         if level <= self.level {
-            writeln!(&mut self.device, "{}", message)
+            match level {
+                LogLevel::Debug => writeln!(&mut self.device, "debug1: {}", message),
+                LogLevel::Debug2 => writeln!(&mut self.device, "debug2: {}", message),
+                LogLevel::Debug3 => writeln!(&mut self.device, "debug3: {}", message),
+                _ => writeln!(&mut self.device, "{}", message),
+            }
         } else {
             Ok(())
         }
@@ -99,11 +104,12 @@ macro_rules! fatal(
     } }
 );
 
-// macro_rules! error(
-//     ($($arg:tt)*) => { {
-//         log!(::log::LogLevel::Error, $($arg)*);
-//     } }
-// );
+#[macro_export]
+macro_rules! error(
+    ($($arg:tt)*) => { {
+        log!(::log::LogLevel::Error, $($arg)*);
+    } }
+);
 
 #[macro_export]
 macro_rules! info(
@@ -112,11 +118,12 @@ macro_rules! info(
     } }
 );
 
-// macro_rules! verbose(
-//     ($($arg:tt)*) => { {
-//         log!(::log::LogLevel::Vebose, $($arg)*);
-//     } }
-// );
+#[macro_export]
+macro_rules! verbose(
+    ($($arg:tt)*) => { {
+        log!(::log::LogLevel::Verbose, $($arg)*);
+    } }
+);
 
 #[macro_export]
 macro_rules! debug(
@@ -125,11 +132,12 @@ macro_rules! debug(
     } }
 );
 
-// macro_rules! debug2(
-//     ($($arg:tt)*) => { {
-//         log!(::log::LogLevel::Debug2, $($arg)*);
-//     } }
-// );
+#[macro_export]
+macro_rules! debug2(
+    ($($arg:tt)*) => { {
+        log!(::log::LogLevel::Debug2, $($arg)*);
+    } }
+);
 
 #[macro_export]
 macro_rules! debug3(

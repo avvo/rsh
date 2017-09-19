@@ -120,7 +120,7 @@ struct ApiKeyRequest {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiKey {
-    public_value: String,
+    pub public_value: String,
     secret_value: String,
 }
 
@@ -148,7 +148,7 @@ impl ContainerExec {
 pub struct HostAccess {
     token: String,
     #[serde(with = "url_serde")]
-    url: url::Url,
+    pub url: url::Url,
 }
 
 impl HostAccess {
@@ -175,6 +175,7 @@ impl Client {
     pub fn ldap_auth(&mut self, url: &url::Url, user: &str, password: &str) -> Result<(), Error> {
         let mut token_url = url.clone();
         token_url.set_path("/v2-beta/token");
+        debug2!("POST {}", &token_url);
         let mut token_request = self.http.post(token_url)?;
         let code = format!("{}:{}", user, password);
         token_request.json(&TokenRequest {
@@ -182,6 +183,7 @@ impl Client {
             auth_provider: String::from("ldapconfig"),
         })?;
         let mut token_response = token_request.send()?;
+        debug3!("{:?}", token_response);
         if !token_response.status().is_success() {
             return Err(Error::Empty);
         }
@@ -189,6 +191,7 @@ impl Client {
 
         let mut api_key_url = url.clone();
         api_key_url.set_path("/v2-beta/apikey");
+        debug2!("POST {}", &api_key_url);
         let mut api_key_request = self.http.post(api_key_url)?;
         let mut cookie = reqwest::header::Cookie::new();
         cookie.set("token", token.jwt);
@@ -199,6 +202,7 @@ impl Client {
             description: String::from("Rancher SHell"),
         })?;
         let mut api_key_response = api_key_request.send()?;
+        debug3!("{:?}", api_key_response);
         if !api_key_response.status().is_success() {
             return Err(Error::Empty);
         }
@@ -219,6 +223,7 @@ impl Client {
         let projects_link = index.links.get("projects").ok_or(Error::Empty)?;
         let project = match environment {
             &Some(ref e) => {
+                debug!("Searching for environment {}", e);
                 self.find_in_collection(
                     projects_link,
                     |p: &Project| &p.name == e,
@@ -227,22 +232,28 @@ impl Client {
             &None => {
                 let mut projects: Collection<Project> = self.get(&projects_link)?;
                 if projects.data.len() == 1 {
-                    projects.data.remove(0)
+                    let env = projects.data.remove(0);
+                    debug!("Using the only environment, {}", env.name);
+                    env
                 } else {
+                    debug!("Couldn't determine default environment, found {}", projects.data.len());
                     return Err(Error::CouldNotDetermineEnvironment);
                 }
             }
         };
+        debug!("Searching for stack {}", stack);
         let stacks_link = project.links.get("stacks").ok_or(Error::Empty)?;
         let stack = self.find_in_collection(
             stacks_link,
             |s: &Stack| s.name == stack,
         )?;
+        debug!("Searching for service {}", service);
         let services_link = stack.links.get("services").ok_or(Error::Empty)?;
         let service = self.find_in_collection(
             services_link,
             |s: &Service| s.name == service,
         )?;
+        debug!("Searching for executable container");
         let instances_link = service.links.get("instances").ok_or(Error::Empty)?;
         self.find_in_collection(instances_link, |c: &Container| {
             c.actions.get("execute").is_some()
@@ -250,6 +261,7 @@ impl Client {
     }
 
     fn index(&self, url: &url::Url) -> Result<Index, Error> {
+        debug!("Connecting to {}", url);
         let mut copy = url.clone();
         copy.set_path("/v2-beta");
         self.get(&copy)
@@ -276,14 +288,17 @@ impl Client {
     where
         T: serde::de::DeserializeOwned,
     {
+        debug2!("GET {}", url);
         let mut request = self.http.get(url.clone())?;
         match self.api_key {
             Some(ref a) => {
+                debug3!("Request Using Rancher API key {}", a.public_value);
                 request.basic_auth(a.public_value.clone(), Some(a.secret_value.clone()));
             }
             _ => (),
         }
         let mut response = request.send()?;
+        debug3!("{:?}", response);
         if response.status() == reqwest::StatusCode::Unauthorized {
             return Err(Error::Unauthorized);
         };
@@ -296,15 +311,18 @@ impl Client {
         T: serde::Serialize,
         U: serde::de::DeserializeOwned,
     {
+        debug2!("POST {}", url);
         let mut request = self.http.post(url.clone())?;
         request.json(body)?;
         match self.api_key {
             Some(ref a) => {
+                debug3!("Request Using Rancher API key {}", a.public_value);
                 request.basic_auth(a.public_value.clone(), Some(a.secret_value.clone()));
             }
             _ => (),
         }
         let mut response = request.send()?;
+        debug3!("{:?}", response);
         if response.status() == reqwest::StatusCode::Unauthorized {
             return Err(Error::Unauthorized);
         };
