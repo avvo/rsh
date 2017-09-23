@@ -1,5 +1,8 @@
+use std;
+
 extern crate nom;
 
+use std::io::Read;
 use std::str::FromStr;
 
 pub use options::{LogLevel, Protocol, RequestTTY};
@@ -7,6 +10,7 @@ use pattern;
 
 #[derive(Debug)]
 pub enum Error {
+    IoError(std::io::Error),
     OptionError(String, String),
     ParseError(nom::ErrorKind),
     UnexpectedEnd,
@@ -24,6 +28,7 @@ macro_rules! from {
 }
 
 from!(nom::ErrorKind => Error, Error::ParseError);
+from!(std::io::Error => Error, Error::IoError);
 
 #[derive(Debug)]
 pub struct Config {
@@ -57,6 +62,11 @@ impl Config {
     search!(service -> String);
     search!(stack -> String);
     search!(user -> String);
+
+    pub fn append(mut self, mut other: Config) -> Self {
+        self.sections.append(&mut other.sections);
+        self
+    }
 }
 
 impl Default for Config {
@@ -74,6 +84,39 @@ impl FromStr for Config {
             nom::IResult::Error(e) => Err(Error::from(e)),
             nom::IResult::Incomplete(_) => Err(Error::UnexpectedEnd),
         }
+    }
+}
+
+pub fn user_config_dir() -> std::path::PathBuf {
+    let mut config_dir = std::env::home_dir().unwrap_or(std::path::PathBuf::from("/"));
+    config_dir.push(".rsh");
+    config_dir
+}
+
+pub fn user_config_path() -> std::path::PathBuf {
+    let mut config_path = user_config_dir();
+    config_path.push("config");
+    config_path
+}
+
+pub fn system_config_path() -> std::path::PathBuf {
+    std::path::PathBuf::from("/etc/rsh/rsh_config")
+}
+
+pub fn api_key_path(file: &str) -> std::path::PathBuf {
+    let mut config_path = user_config_dir();
+    config_path.push(file);
+    config_path
+}
+
+pub fn open_config(path: &std::path::PathBuf) -> Result<Config, Error> {
+    match std::fs::File::open(path).map(std::io::BufReader::new) {
+        Ok(mut reader) => {
+            let mut string = String::new();
+            reader.read_to_string(&mut string)?;
+            Ok(string.parse()?)
+        }
+        Err(_) => Ok(Config::default()),
     }
 }
 

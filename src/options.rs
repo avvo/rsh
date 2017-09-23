@@ -333,6 +333,14 @@ impl Options {
             )).unwrap()
         }
     }
+
+    pub fn host_with_port(&self) -> String {
+        if self.port == self.protocol.default_port() {
+            format!("{}", self.host_name)
+        } else {
+            format!("{}:{}", self.host_name, self.port)
+        }
+    }
 }
 
 impl fmt::Display for Options {

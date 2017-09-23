@@ -54,6 +54,7 @@ fn main() {
         "LOGFILE",
     );
     opts.optopt("e", "", "Sets the escape character (default: `~')", "CHAR");
+    opts.optopt("F", "", "Specifies an alternative configuration file", "CONFIGFILE");
     opts.optflag("G", "", "Print the configuration and exit");
     opts.optopt(
         "l",
@@ -112,46 +113,16 @@ fn main() {
 
     verbose!("{} {}", NAME, VERSION);
 
-    let mut config_dir = std::env::home_dir().unwrap_or(std::path::PathBuf::from("/"));
-    config_dir.push(".rsh");
-    std::fs::create_dir_all(&config_dir).expect("couldn't create config dir");
-    let mut config_path = config_dir.clone();
-    config_path.push("config");
-    debug!("Reading configuration data {}", config_path.to_string_lossy());
-    let config: config::Config =
-        match std::fs::File::open(&config_path).map(std::io::BufReader::new) {
-            Ok(mut reader) => {
-                let mut string = String::new();
-                reader.read_to_string(&mut string).expect(
-                    "failed to read config",
-                );
-                match string.parse() {
-                    Ok(v) => v,
-                    Err(config::Error::OptionError(key, value)) => {
-                        fatal!(
-                            "{}: Bad configuration option: \"{}\" for {}",
-                            config_path.to_string_lossy(),
-                            value,
-                            key
-                        );
-                        std::process::exit(1);
-                    }
-                    Err(config::Error::UnknownOption(key)) => {
-                        fatal!(
-                            "{}: Bad configuration option: {}",
-                            config_path.to_string_lossy(),
-                            key
-                        );
-                        std::process::exit(1);
-                    }
-                    _ => {
-                        fatal!("{}: Error parsing config.", config_path.to_string_lossy());
-                        std::process::exit(1);
-                    }
-                }
-            }
-            Err(_) => config::Config::default(),
-        };
+    std::fs::create_dir_all(config::user_config_dir()).expect("couldn't create config dir");
+
+    let config = match matches.opt_str("F").map(std::path::PathBuf::from) {
+        Some(val) => open_config_or_exit(val),
+        None => {
+            let user_config = open_config_or_exit(config::user_config_path());
+            let system_config = open_config_or_exit(config::system_config_path());
+            user_config.append(system_config)
+        }
+    };
 
     if let Some(value) = config.log_level(host) {
         log::set_level(value);
@@ -334,13 +305,7 @@ fn main() {
 
     let mut client = rancher::Client::new();
 
-    let mut api_key_path = config_dir.clone();
-    let host = if options.port == options.protocol.default_port() {
-        format!("{}", options.host_name)
-    } else {
-        format!("{}:{}", options.host_name, options.port)
-    };
-    api_key_path.push(host);
+    let api_key_path = config::api_key_path(&options.host_with_port());
     debug!("Reading Rancher API key from {}", api_key_path.to_string_lossy());
     match std::fs::File::open(&api_key_path).map(std::io::BufReader::new) {
         Ok(mut reader) => {
@@ -576,4 +541,36 @@ Supported escape sequences:\r
     }
 
     info!("\nConnection to {} closed.", url);
+}
+
+fn open_config_or_exit(config_path: std::path::PathBuf) -> config::Config {
+    debug!("Reading configuration data {}", config_path.to_string_lossy());
+    match config::open_config(&config_path) {
+        Ok(v) => v,
+        Err(config::Error::OptionError(key, value)) => {
+            fatal!(
+                "{}: Bad configuration option: \"{}\" for {}",
+                config_path.to_string_lossy(),
+                value,
+                key
+            );
+            std::process::exit(1);
+        }
+        Err(config::Error::UnknownOption(key)) => {
+            fatal!(
+                "{}: Bad configuration option: {}",
+                config_path.to_string_lossy(),
+                key
+            );
+            std::process::exit(1);
+        }
+        Err(config::Error::IoError(_)) => {
+            fatal!("{}: Error reading config.", config_path.to_string_lossy());
+            std::process::exit(1);
+        }
+        _ => {
+            fatal!("{}: Error parsing config.", config_path.to_string_lossy());
+            std::process::exit(1);
+        }
+    }
 }
