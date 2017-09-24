@@ -94,6 +94,25 @@ fn main() {
         _ => log::set_level(options::LogLevel::Debug3),
     };
 
+    match matches.opt_str("E") {
+        Some(ref path) => {
+            let result = std::fs::OpenOptions::new().create(true).append(true).open(
+                path,
+            );
+            match result {
+                Ok(file) => log::set_device(file),
+                Err(e) => {
+                    fatal!("Couldn't open logfile {}: {}", path, e);
+                    std::process::exit(1);
+                }
+            };
+
+            let file = std::fs::File::create(path).unwrap();
+            log::set_device(file);
+        }
+        None => (),
+    };
+
     if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
         std::process::exit(0);
@@ -173,25 +192,6 @@ fn main() {
             (a @ Some(_), b @ Some(_), c @ Some(_)) => (a, b, c),
             _ => panic!("didn't expect a path segment to follow None"),
         }
-    };
-
-    match matches.opt_str("E") {
-        Some(ref path) => {
-            let result = std::fs::OpenOptions::new().create(true).append(true).open(
-                path,
-            );
-            match result {
-                Ok(file) => log::set_device(file),
-                Err(e) => {
-                    fatal!("Couldn't open logfile {}: {}", path, e);
-                    std::process::exit(1);
-                }
-            };
-
-            let file = std::fs::File::create(path).unwrap();
-            log::set_device(file);
-        }
-        None => (),
     };
 
     let mut option_builder = options::OptionsBuilder::default();
