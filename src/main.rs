@@ -41,6 +41,13 @@ use rancher::{ContainerExec, HostAccess};
 const NAME: &'static str = env!("CARGO_PKG_NAME");
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
+enum ProgramStatus {
+    Success,
+    SuccessWithHelp,
+    Failure,
+    FailureWithHelp,
+}
+
 fn main() {
     let mut opts = getopts::Options::new();
     opts.parsing_style(getopts::ParsingStyle::StopAtFirstFree);
@@ -83,6 +90,18 @@ fn main() {
         Ok(matches) => matches,
     };
 
+    match run(matches) {
+        ProgramStatus::Success => (),
+        ProgramStatus::SuccessWithHelp => print!("{}", opts.usage(&brief)),
+        ProgramStatus::Failure => std::process::exit(1),
+        ProgramStatus::FailureWithHelp => {
+            eprint!("{}", opts.usage(&brief));
+            std::process::exit(1);
+        }
+    };
+}
+
+fn run(matches: getopts::Matches) -> ProgramStatus {
     if matches.opt_present("q") || matches.free.len() > 1 {
         log::set_level(options::LogLevel::Quiet);
     }
@@ -103,7 +122,7 @@ fn main() {
                 Ok(file) => log::set_device(file),
                 Err(e) => {
                     fatal!("Couldn't open logfile {}: {}", path, e);
-                    std::process::exit(1);
+                    return ProgramStatus::Failure;
                 }
             };
 
@@ -115,19 +134,14 @@ fn main() {
 
     if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
-        std::process::exit(0);
+        return ProgramStatus::Success;
     } else if matches.opt_present("help") {
-        print!("{}", opts.usage(&brief));
-        std::process::exit(0);
+        return ProgramStatus::SuccessWithHelp;
     }
 
     let host = match matches.free.get(0) {
-        Some(v) => v,
-        None => {
-            verbose!("Missing host.");
-            eprint!("{}", opts.usage(&brief));
-            std::process::exit(1);
-        }
+        Some(v) => v.clone(),
+        None => return ProgramStatus::FailureWithHelp,
     };
 
     verbose!("{} {}", NAME, VERSION);
@@ -143,30 +157,32 @@ fn main() {
         }
     };
 
-    if let Some(value) = config.log_level(host) {
+    if let Some(value) = config.log_level(&host) {
         log::set_level(value);
     }
 
+    run_with_matches_and_config(matches, config, host)
+}
+
+fn run_with_matches_and_config(matches: getopts::Matches, config: config::Config, host: String) -> ProgramStatus {
     let url = match if !host.contains("://") {
-        let protocol = config.protocol(host).unwrap_or(
+        let protocol = config.protocol(&host).unwrap_or(
             options::Protocol::default(),
         );
         url::Url::parse(&format!("{}://{}", protocol, host))
     } else {
-        url::Url::parse(host)
+        url::Url::parse(&host)
     } {
         Ok(v) => v,
         Err(_) => {
             verbose!("Error parsing host.");
-            eprint!("{}", opts.usage(&brief));
-            std::process::exit(1);
+            return ProgramStatus::FailureWithHelp;
         }
     };
 
     if url.cannot_be_a_base() {
         verbose!("Error parsing host, non-base URL.");
-        eprint!("{}", opts.usage(&brief));
-        std::process::exit(1);
+        return ProgramStatus::FailureWithHelp;
     };
 
     let (environment, stack, service) = {
@@ -180,8 +196,7 @@ fn main() {
         if path_segments.next().is_some() {
             // weren't expecting another path segment
             verbose!("Error parsing host, too many path segments.");
-            eprint!("{}", opts.usage(&brief));
-            std::process::exit(1);
+            return ProgramStatus::FailureWithHelp;
         };
 
         match (first, second, third) {
@@ -205,18 +220,17 @@ fn main() {
         "https" => options::Protocol::Https,
         _ => {
             verbose!("Unsupported protocol.");
-            eprint!("{}", opts.usage(&brief));
-            std::process::exit(1);
+            return ProgramStatus::FailureWithHelp;
         }
     });
 
     if !url.username().is_empty() {
         option_builder.user(url.username().into());
-    } else if let Some(value) = matches.opt_str("l").or_else(|| config.user(host)) {
+    } else if let Some(value) = matches.opt_str("l").or_else(|| config.user(&host)) {
         option_builder.user(value);
     }
 
-    if let Some(value) = config.host_name(host).or_else(|| {
+    if let Some(value) = config.host_name(&host).or_else(|| {
         url.host_str().map(std::convert::Into::into)
     })
     {
@@ -231,22 +245,22 @@ fn main() {
             Ok(v) => option_builder.port(v),
             Err(_) => {
                 eprintln!("Bad port '{}'.", port_string);
-                std::process::exit(1);
+                return ProgramStatus::Failure;
             }
         };
-    } else if let Some(value) = config.port(host) {
+    } else if let Some(value) = config.port(&host) {
         option_builder.port(value);
     }
 
-    if let Some(value) = environment.or_else(|| config.environment(host)) {
+    if let Some(value) = environment.or_else(|| config.environment(&host)) {
         option_builder.environment(value.into());
     }
 
-    if let Some(value) = stack.or_else(|| config.stack(host)) {
+    if let Some(value) = stack.or_else(|| config.stack(&host)) {
         option_builder.stack(value.into());
     }
 
-    if let Some(value) = service.or_else(|| config.service(host)) {
+    if let Some(value) = service.or_else(|| config.service(&host)) {
         option_builder.service(value.into());
     }
 
@@ -256,12 +270,12 @@ fn main() {
                 Ok(v) if v.is_ascii() => option_builder.escape_char(v),
                 _ => {
                     eprintln!("Bad escape character '{}'.", escape_str);
-                    std::process::exit(1);
+                    return ProgramStatus::Failure;
                 }
             };
         }
     } else {
-        option_builder.escape_char(config.escape_char(host).unwrap_or('~'));
+        option_builder.escape_char(config.escape_char(&host).unwrap_or('~'));
     }
 
     if matches.opt_count("t") > 1 {
@@ -270,7 +284,7 @@ fn main() {
         option_builder.request_tty(options::RequestTTY::Yes);
     } else if matches.opt_present("T") {
         option_builder.request_tty(options::RequestTTY::No);
-    } else if let Some(value) = config.request_tty(host) {
+    } else if let Some(value) = config.request_tty(&host) {
         option_builder.request_tty(value);
     }
 
@@ -280,7 +294,7 @@ fn main() {
             .map(|s| shell_escape::escape(s.clone().into()))
             .collect();
         option_builder.remote_command(vec.join(" "));
-    } else if let Some(value) = config.remote_command(host) {
+    } else if let Some(value) = config.remote_command(&host) {
         option_builder.remote_command(value);
     };
 
@@ -288,21 +302,23 @@ fn main() {
         Ok(v) => v,
         Err(options::BuildError::MissingHostName) => {
             verbose!("Missing host name.");
-            eprint!("{}", opts.usage(&brief));
-            std::process::exit(1);
+            return ProgramStatus::FailureWithHelp;
         }
         Err(options::BuildError::MissingService) => {
             verbose!("Missing service.");
-            eprint!("{}", opts.usage(&brief));
-            std::process::exit(1);
+            return ProgramStatus::FailureWithHelp;
         }
     };
 
     if matches.opt_present("G") {
         println!("{}", options);
-        std::process::exit(0);
+        return ProgramStatus::Success;
     }
 
+    run_with_options(options)
+}
+
+fn run_with_options(options: options::Options) -> ProgramStatus {
     let mut client = rancher::Client::new();
 
     let api_key_path = config::api_key_path(&options.host_with_port());
@@ -341,7 +357,7 @@ fn main() {
                     Ok(_) => (),
                     Err(_) => {
                         fatal!("Authentication failed.");
-                        std::process::exit(1);
+                        return ProgramStatus::Failure;
                     }
                 };
                 debug!("Writing {}", api_key_path.to_string_lossy());
@@ -357,11 +373,11 @@ fn main() {
             }
             Err(rancher::Error::Empty) => {
                 fatal!("Couldn't find container.");
-                std::process::exit(1);
+                return ProgramStatus::Failure;
             }
             Err(e) => {
                 fatal!("{}", e);
-                std::process::exit(1);
+                return ProgramStatus::Failure;
             }
         };
         // need to give rancher a tiny bit of time to activate the api keys
@@ -541,8 +557,10 @@ Supported escape sequences:\r
     }
 
     info!("\nConnection to {} closed.", url);
+    ProgramStatus::Success
 }
 
+// TODO figure out returning error rather than exiting
 fn open_config_or_exit(config_path: std::path::PathBuf) -> config::Config {
     debug!("Reading configuration data {}", config_path.to_string_lossy());
     match config::open_config(&config_path) {
