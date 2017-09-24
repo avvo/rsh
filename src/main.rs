@@ -161,10 +161,6 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
         log::set_level(value);
     }
 
-    run_with_matches_and_config(matches, config, host)
-}
-
-fn run_with_matches_and_config(matches: getopts::Matches, config: config::Config, host: String) -> ProgramStatus {
     let url = match if !host.contains("://") {
         let protocol = config.protocol(&host).unwrap_or(
             options::Protocol::default(),
@@ -437,7 +433,9 @@ fn run_with_options(options: options::Options) -> ProgramStatus {
     let host_access: HostAccess = client
         .post(execute_url, &ContainerExec::new(exec, is_tty))
         .expect("execute failed");
+    debug2!("Got websocket address {}", host_access.url);
 
+    let status;
     {
         // raw mode will stay in effect until the raw var is dropped
         // we otherwise don't actually need it for anything
@@ -447,107 +445,10 @@ fn run_with_options(options: options::Options) -> ProgramStatus {
             stdout.flush().unwrap();
             Some(stdout)
         } else {
+            debug3!("Not a TTY skipping raw mode");
             None
         };
-
-        let (sender, receiver) = futures::sync::mpsc::channel(0);
-        std::thread::spawn(move || {
-            let mut escape_scanner = escape::scanner(options.escape_char);
-            let mut stdin = std::io::stdin();
-            let mut buffer = [0; 4096];
-            let mut vbuffer = std::vec::Vec::new();
-            let mut sink = sender.wait();
-            'main: loop {
-                escape_scanner.reset();
-                let mut sent = 0;
-                let read = stdin.read(&mut buffer[..]).unwrap();
-                while sent < read {
-                    let escape_type = escape_scanner.next_escape(&buffer, read);
-                    let bytes = match escape_type {
-                        escape::Escape::DecreaseVerbosity |
-                        escape::Escape::Help |
-                        escape::Escape::IncreaseVerbosity |
-                        escape::Escape::Itself |
-                        escape::Escape::Suspend |
-                        escape::Escape::Terminate => &buffer[sent..escape_scanner.pos() - 1],
-                        escape::Escape::Invalid => {
-                            vbuffer.clear();
-                            vbuffer.push(escape_scanner.char() as u8);
-                            vbuffer.extend(&buffer[sent..(escape_scanner.pos())]);
-                            &vbuffer[..]
-                        }
-                        escape::Escape::Literal | escape::Escape::None => {
-                            &buffer[sent..(escape_scanner.pos())]
-                        }
-                    };
-                    let message = base64::encode(bytes);
-                    sink.send(websocket::OwnedMessage::Text(message)).unwrap();
-                    sent = escape_scanner.pos();
-                    match escape_type {
-                        escape::Escape::DecreaseVerbosity => {
-                            let level = log::decrease_level();
-                            println!("{}V [LogLevel {}]\r", escape_scanner.char(), level);
-                        }
-                        escape::Escape::Help => {
-                            println!(
-                                "{0}?\r
-Supported escape sequences:\r
- {0}.   - terminate connection\r
- {0}V/v - decrease/increase verbosity (LogLevel)\r
- {0}^Z  - suspend rsh\r
- {0}?   - this message\r
- {0}{0}   - send the escape character by typing it twice\r
-(Note that escapes are only recognized immediately after newline.)\r",
-                                escape_scanner.char()
-                            );
-                        }
-                        escape::Escape::IncreaseVerbosity => {
-                            let level = log::increase_level();
-                            println!("{}v [LogLevel {}]\r", escape_scanner.char(), level);
-                        }
-                        escape::Escape::Suspend => {
-                            nix::sys::signal::kill(
-                                nix::unistd::getpid(),
-                                Some(nix::sys::signal::Signal::SIGTSTP),
-                            ).expect("failed to suspend");
-                        }
-                        escape::Escape::Terminate => {
-                            break 'main;
-                        }
-                        _ => (),
-                    }
-                }
-            }
-        });
-
-        let mut core = tokio_core::reactor::Core::new().unwrap();
-        let mut stdout = std::io::stdout();
-
-        debug!("Connecting to websocket {}\r", host_access.url);
-        let runner = websocket::ClientBuilder::from_url(&host_access.authed_url())
-            .async_connect(None, &core.handle())
-            .and_then(|(duplex, _)| {
-                let (sink, stream) = duplex.split();
-                and_select::new(
-                    stream.filter_map(|message| match message {
-                        websocket::OwnedMessage::Text(txt) => {
-                            stdout
-                                .write(&base64::decode(&txt).expect("invalid base64"))
-                                .unwrap();
-                            stdout.flush().unwrap();
-                            None
-                        }
-                        websocket::OwnedMessage::Close(e) => Some(
-                            websocket::OwnedMessage::Close(e),
-                        ),
-                        websocket::OwnedMessage::Ping(d) => Some(websocket::OwnedMessage::Pong(d)),
-                        _ => None,
-                    }),
-                    receiver.map_err(|_| websocket::result::WebSocketError::NoDataAvailable),
-                ).forward(sink)
-            });
-        core.run(runner).unwrap();
-
+        status = connect(host_access.authed_url(), get_input(options.escape_char));
         // don't really need to do this, but the compiler wants us to use raw
         // for *something*
         match raw {
@@ -555,8 +456,114 @@ Supported escape sequences:\r
             None => (),
         };
     }
-
     info!("\nConnection to {} closed.", url);
+    status
+}
+
+fn get_input(escape_char: Option<char>) -> futures::sync::mpsc::Receiver<websocket::OwnedMessage> {
+    let (sender, receiver) = futures::sync::mpsc::channel(0);
+    std::thread::spawn(move || {
+        let mut escape_scanner = escape::scanner(escape_char);
+        let mut stdin = std::io::stdin();
+        let mut buffer = [0; 4096];
+        let mut vbuffer = std::vec::Vec::new();
+        let mut sink = sender.wait();
+        'main: loop {
+            escape_scanner.reset();
+            let mut sent = 0;
+            let read = stdin.read(&mut buffer[..]).unwrap();
+            while sent < read {
+                let escape_type = escape_scanner.next_escape(&buffer, read);
+                let bytes = match escape_type {
+                    escape::Escape::DecreaseVerbosity |
+                    escape::Escape::Help |
+                    escape::Escape::IncreaseVerbosity |
+                    escape::Escape::Itself |
+                    escape::Escape::Suspend |
+                    escape::Escape::Terminate => &buffer[sent..escape_scanner.pos() - 1],
+                    escape::Escape::Invalid => {
+                        vbuffer.clear();
+                        vbuffer.push(escape_scanner.char() as u8);
+                        vbuffer.extend(&buffer[sent..(escape_scanner.pos())]);
+                        &vbuffer[..]
+                    }
+                    escape::Escape::Literal | escape::Escape::None => {
+                        &buffer[sent..(escape_scanner.pos())]
+                    }
+                };
+                let message = base64::encode(bytes);
+                sink.send(websocket::OwnedMessage::Text(message)).unwrap();
+                sent = escape_scanner.pos();
+                match escape_type {
+                    escape::Escape::DecreaseVerbosity => {
+                        let level = log::decrease_level();
+                        println!("{}V [LogLevel {}]\r", escape_scanner.char(), level);
+                    }
+                    escape::Escape::Help => {
+                        println!(
+                            "{0}?\r
+Supported escape sequences:\r
+{0}.   - terminate connection\r
+{0}V/v - decrease/increase verbosity (LogLevel)\r
+{0}^Z  - suspend rsh\r
+{0}?   - this message\r
+{0}{0}   - send the escape character by typing it twice\r
+(Note that escapes are only recognized immediately after newline.)\r",
+                            escape_scanner.char()
+                        );
+                    }
+                    escape::Escape::IncreaseVerbosity => {
+                        let level = log::increase_level();
+                        println!("{}v [LogLevel {}]\r", escape_scanner.char(), level);
+                    }
+                    escape::Escape::Suspend => {
+                        nix::sys::signal::kill(
+                            nix::unistd::getpid(),
+                            Some(nix::sys::signal::Signal::SIGTSTP),
+                        ).expect("failed to suspend");
+                    }
+                    escape::Escape::Terminate => {
+                        break 'main;
+                    }
+                    _ => (),
+                }
+            }
+        }
+    });
+    receiver
+}
+
+fn connect(websocket_url: url::Url, stdin: futures::sync::mpsc::Receiver<websocket::OwnedMessage>) -> ProgramStatus {
+    let mut core = tokio_core::reactor::Core::new().unwrap();
+    let mut stdout = std::io::stdout();
+
+    debug!("Connecting to websocket\r");
+    let runner = websocket::ClientBuilder::from_url(&websocket_url)
+        .async_connect(None, &core.handle())
+        .and_then(|(duplex, _)| {
+            let (sink, stream) = duplex.split();
+            and_select::new(
+                stream.filter_map(|message| match message {
+                    websocket::OwnedMessage::Text(txt) => {
+                        stdout
+                            .write(&base64::decode(&txt).expect("invalid base64"))
+                            .unwrap();
+                        stdout.flush().unwrap();
+                        None
+                    }
+                    websocket::OwnedMessage::Close(e) => Some(
+                        websocket::OwnedMessage::Close(e),
+                    ),
+                    websocket::OwnedMessage::Ping(d) => Some(websocket::OwnedMessage::Pong(d)),
+                    _ => None,
+                }),
+                stdin.map_err(|_| websocket::result::WebSocketError::NoDataAvailable),
+            ).forward(sink)
+        });
+
+    core.run(runner).unwrap();
+    debug3!("connection closed");
+
     ProgramStatus::Success
 }
 
