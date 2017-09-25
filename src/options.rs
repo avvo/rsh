@@ -1,4 +1,5 @@
 extern crate url;
+extern crate users;
 
 use std;
 use std::error::Error;
@@ -229,7 +230,7 @@ impl OptionsBuilder {
             request_tty: self.request_tty,
             stack: self.stack.unwrap_or(service.clone()),
             service,
-            user: self.user.unwrap_or(String::from("root")),
+            user: self.user.or(users::get_current_username()).unwrap_or(String::from("root")),
         })
     }
 

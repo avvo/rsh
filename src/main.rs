@@ -14,6 +14,7 @@ extern crate shell_escape;
 extern crate termion;
 extern crate tokio_core;
 extern crate url;
+extern crate users;
 extern crate websocket;
 
 use futures::future::Future;
@@ -345,7 +346,7 @@ fn run_with_options(options: options::Options) -> ProgramStatus {
             Ok(v) => break v,
             Err(rancher::Error::Unauthorized) if tries == 0 => {
                 debug2!("Received Unauthorized, attempting authentication");
-                let user = prompt_with_default("Rancher User", std::env::var("USER").ok())
+                let user = prompt_with_default("Rancher User", users::get_current_username())
                     .expect("couldn't get user");
                 let password = rpassword::prompt_password_stdout(&"Rancher Password: ")
                     .expect("couldn't get password");
