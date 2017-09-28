@@ -2,6 +2,7 @@ use std;
 
 extern crate nom;
 
+use std::ascii::AsciiExt;
 use std::io::Read;
 use std::str::FromStr;
 
@@ -12,6 +13,7 @@ use pattern;
 pub enum Error {
     IoError(std::io::Error),
     OptionError(String, String),
+    OptionNotAllowed(String),
     ParseError(nom::ErrorKind),
     UnexpectedEnd,
     UnknownOption(String),
@@ -62,6 +64,21 @@ impl Config {
     search!(service -> String);
     search!(stack -> String);
     search!(user -> String);
+
+    pub fn try_from(options: Vec<&str>) -> Result<Config, Error> {
+        let mut parsed = Vec::new();
+        for opt in options {
+            match pair(&opt) {
+                nom::IResult::Done(_, (key, _)) if key.eq_ignore_ascii_case("host") => {
+                    return Err(Error::OptionNotAllowed(key.into()))
+                }
+                nom::IResult::Done(_, pair) => parsed.push(pair),
+                nom::IResult::Error(e) => return Err(Error::from(e)),
+                nom::IResult::Incomplete(_) => return Err(Error::UnexpectedEnd),
+            };
+        };
+        build_config(parsed)
+    }
 
     pub fn append(mut self, mut other: Config) -> Self {
         self.sections.append(&mut other.sections);
@@ -195,12 +212,17 @@ named!(config_file(&str) -> Vec<(&str, &str)>, do_parse!(
 
 named!(pairs(&str) -> Vec<(&str, &str)>, many0!(do_parse!(
     blank >>
+    pair: call!(pair) >>
+    blank >>
+    (pair)
+)));
+
+named!(pair(&str) -> (&str, &str), do_parse!(
     key: call!(nom::alphanumeric) >>
     alt!(tag_s!(" ") | tag_s!("=")) >>
     val: opt!(value) >>
-    blank >>
     (key, val.unwrap_or(""))
-)));
+));
 
 named!(blank(&str) -> Vec<&str>, many0!(alt!(comment | call!(nom::multispace))));
 

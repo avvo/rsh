@@ -70,6 +70,7 @@ fn main() {
         "Specifies the user to log in as on the remote machine",
         "USER",
     );
+    opts.optmulti("o", "", "Set an option by name", "OPTION");
     opts.optopt("p", "", "Port to connect to on the remote host", "PORT");
     opts.optflag("q", "", "Quiet mode");
     opts.optflag("T", "", "Disable pseudo-terminal allocation");
@@ -154,15 +155,65 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
     };
 
     let config = {
-        let mut acc = config::Config::default();
+        let mut acc = match config::Config::try_from(matches.opt_strs("o").iter().map(AsRef::as_ref).collect()) {
+            Ok(v) => v,
+            Err(config::Error::OptionError(key, value)) => {
+                fatal!(
+                    "Bad configuration option: \"{}\" for {}.",
+                    value,
+                    key
+                );
+                return ProgramStatus::Failure;
+            }
+            Err(config::Error::UnknownOption(key)) => {
+                fatal!(
+                    "Bad configuration option: {}.",
+                    key
+                );
+                return ProgramStatus::Failure;
+            }
+            Err(config::Error::OptionNotAllowed(key)) => {
+                fatal!("{} directive not supported as a command-line option.", key);
+                return ProgramStatus::Failure;
+            }
+            _ => {
+                fatal!("Error configuration option.");
+                return ProgramStatus::Failure;
+            }
+        };
         for path in config_paths {
-            match open_config_or_exit(path) {
-                Ok(cfg) => acc = acc.append(cfg),
-                Err(msg) => {
-                    fatal!("{}", msg);
+            debug!("Reading configuration data {}", path.to_string_lossy());
+            match config::open_config(&path) {
+                Ok(v) => acc = acc.append(v),
+                Err(config::Error::OptionError(key, value)) => {
+                  fatal!(
+                      "{}: Bad configuration option: \"{}\" for {}.",
+                      path.to_string_lossy(),
+                      value,
+                      key
+                  );
+                  return ProgramStatus::Failure;
+                }
+                Err(config::Error::UnknownOption(key)) => {
+                    fatal!(
+                        "{}: Bad configuration option: {}.",
+                        path.to_string_lossy(),
+                        key
+                    );
                     return ProgramStatus::Failure;
                 }
-            };
+                Err(config::Error::IoError(_)) => {
+                    fatal!(
+                        "{}: Error reading config.",
+                        path.to_string_lossy()
+                    );
+                    return ProgramStatus::Failure;
+                }
+                _ => {
+                    fatal!("{}: Error parsing config.", path.to_string_lossy());
+                    return ProgramStatus::Failure;
+                }
+            }
         };
         acc
     };
@@ -575,27 +626,4 @@ fn connect(websocket_url: url::Url, stdin: futures::sync::mpsc::Receiver<websock
     debug3!("connection closed");
 
     ProgramStatus::Success
-}
-
-fn open_config_or_exit(config_path: std::path::PathBuf) -> Result<config::Config, String> {
-    debug!("Reading configuration data {}", config_path.to_string_lossy());
-    match config::open_config(&config_path) {
-        Ok(v) => Ok(v),
-        Err(config::Error::OptionError(key, value)) => Err(format!(
-            "{}: Bad configuration option: \"{}\" for {}",
-            config_path.to_string_lossy(),
-            value,
-            key
-        )),
-        Err(config::Error::UnknownOption(key)) => Err(format!(
-            "{}: Bad configuration option: {}",
-            config_path.to_string_lossy(),
-            key
-        )),
-        Err(config::Error::IoError(_)) => Err(format!(
-            "{}: Error reading config.",
-            config_path.to_string_lossy()
-        )),
-        _ => Err(format!("{}: Error parsing config.", config_path.to_string_lossy())),
-    }
 }
