@@ -149,13 +149,23 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
 
     std::fs::create_dir_all(config::user_config_dir()).expect("couldn't create config dir");
 
-    let config = match matches.opt_str("F").map(std::path::PathBuf::from) {
-        Some(val) => open_config_or_exit(val),
-        None => {
-            let user_config = open_config_or_exit(config::user_config_path());
-            let system_config = open_config_or_exit(config::system_config_path());
-            user_config.append(system_config)
-        }
+    let config_paths = match matches.opt_str("F").map(std::path::PathBuf::from) {
+        Some(val) => vec![val],
+        None => vec![config::user_config_path(), config::system_config_path()],
+    };
+
+    let config = {
+        let mut acc = config::Config::default();
+        for path in config_paths {
+            match open_config_or_exit(path) {
+                Ok(cfg) => acc = acc.append(cfg),
+                Err(msg) => {
+                    fatal!("{}", msg);
+                    return ProgramStatus::Failure;
+                }
+            };
+        };
+        acc
     };
 
     if let Some(value) = config.log_level(&host) {
@@ -568,35 +578,25 @@ fn connect(websocket_url: url::Url, stdin: futures::sync::mpsc::Receiver<websock
     ProgramStatus::Success
 }
 
-// TODO figure out returning error rather than exiting
-fn open_config_or_exit(config_path: std::path::PathBuf) -> config::Config {
+fn open_config_or_exit(config_path: std::path::PathBuf) -> Result<config::Config, String> {
     debug!("Reading configuration data {}", config_path.to_string_lossy());
     match config::open_config(&config_path) {
-        Ok(v) => v,
-        Err(config::Error::OptionError(key, value)) => {
-            fatal!(
-                "{}: Bad configuration option: \"{}\" for {}",
-                config_path.to_string_lossy(),
-                value,
-                key
-            );
-            std::process::exit(1);
-        }
-        Err(config::Error::UnknownOption(key)) => {
-            fatal!(
-                "{}: Bad configuration option: {}",
-                config_path.to_string_lossy(),
-                key
-            );
-            std::process::exit(1);
-        }
-        Err(config::Error::IoError(_)) => {
-            fatal!("{}: Error reading config.", config_path.to_string_lossy());
-            std::process::exit(1);
-        }
-        _ => {
-            fatal!("{}: Error parsing config.", config_path.to_string_lossy());
-            std::process::exit(1);
-        }
+        Ok(v) => Ok(v),
+        Err(config::Error::OptionError(key, value)) => Err(format!(
+            "{}: Bad configuration option: \"{}\" for {}",
+            config_path.to_string_lossy(),
+            value,
+            key
+        )),
+        Err(config::Error::UnknownOption(key)) => Err(format!(
+            "{}: Bad configuration option: {}",
+            config_path.to_string_lossy(),
+            key
+        )),
+        Err(config::Error::IoError(_)) => Err(format!(
+            "{}: Error reading config.",
+            config_path.to_string_lossy()
+        )),
+        _ => Err(format!("{}: Error parsing config.", config_path.to_string_lossy())),
     }
 }
