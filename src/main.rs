@@ -78,14 +78,10 @@ fn main() {
 
     let mut args: Vec<String> = std::env::args().collect();
     let program = args.remove(0);
-    let brief = format!(
-        "Usage: {} [opts] [protocol://][user@]host[:port][[/env]/stack]/service [cmd]",
-        program
-    );
 
     let matches = match opts.parse(args) {
         Err(e) => {
-            eprint!("{}\n{}", e, opts.usage(&brief));
+            eprint!("{}\n{}", e, opts.short_usage(&program));
             std::process::exit(1);
         }
         Ok(matches) => matches,
@@ -93,10 +89,13 @@ fn main() {
 
     match run(matches) {
         ProgramStatus::Success => (),
-        ProgramStatus::SuccessWithHelp => print!("{}", opts.usage(&brief)),
+        ProgramStatus::SuccessWithHelp => print!("{}", opts.usage(&format!(
+            "Usage: {} [opts] [protocol://][user@]host[:port][[/env]/stack]/service [cmd]",
+            program
+        ))),
         ProgramStatus::Failure => std::process::exit(1),
         ProgramStatus::FailureWithHelp => {
-            eprint!("{}", opts.usage(&brief));
+            eprint!("{}", opts.short_usage(&program));
             std::process::exit(1);
         }
     };
