@@ -345,6 +345,10 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
         option_builder.request_tty(value);
     }
 
+    for pattern in config.send_env(&host) {
+        option_builder.send_env(pattern);
+    }
+
     if matches.free.len() > 1 {
         let vec: Vec<_> = matches.free[1..]
             .iter()
@@ -368,7 +372,7 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
     };
 
     if matches.opt_present("G") {
-        println!("{}", options);
+        print!("{}", options);
         return ProgramStatus::Success;
     }
 
@@ -459,15 +463,14 @@ fn run_with_options(options: options::Options) -> ProgramStatus {
     };
 
     let mut command_parts = Vec::new();
-    let send_env = vec!["TERM"];
-    for var in send_env {
-        match std::env::var(var) {
-            Ok(v) => {
-                command_parts.push(format!("{}={}", var, v));
-                command_parts.push(format!("export {}", var));
-            }
-            Err(_) => (),
-        };
+    let mut send_env_patterns = options.send_env;
+    send_env_patterns.push("TERM".parse().unwrap());
+    let send_env = pattern::PatternList::from(send_env_patterns);
+    for (key, val) in std::env::vars() {
+        if send_env.matches(&key) {
+            command_parts.push(format!("{}={}", key, val));
+            command_parts.push(format!("export {}", key));
+        }
     }
 
     if is_tty {

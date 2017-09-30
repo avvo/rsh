@@ -6,6 +6,8 @@ use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 
+use pattern;
+
 #[derive(Debug)]
 pub enum BuildError {
     MissingHostName,
@@ -211,6 +213,7 @@ pub struct OptionsBuilder {
     protocol: Protocol,
     remote_command: Option<String>,
     request_tty: RequestTTY,
+    send_env: Vec<pattern::Pattern>,
     service: Option<String>,
     stack: Option<String>,
     user: Option<String>,
@@ -228,6 +231,7 @@ impl OptionsBuilder {
             protocol: self.protocol,
             remote_command: self.remote_command,
             request_tty: self.request_tty,
+            send_env: self.send_env,
             stack: self.stack.unwrap_or(service.clone()),
             service,
             user: self.user.or(users::get_current_username()).unwrap_or(String::from("root")),
@@ -274,6 +278,11 @@ impl OptionsBuilder {
         self
     }
 
+    pub fn send_env<'a>(&'a mut self, pattern: pattern::Pattern) -> &'a mut OptionsBuilder {
+        self.send_env.push(pattern);
+        self
+    }
+
     pub fn service<'a>(&'a mut self, service: String) -> &'a mut OptionsBuilder {
         self.service = Some(service);
         self
@@ -312,7 +321,7 @@ pub struct Options {
     // pub proxy_use_fdpass: bool, // default false
     pub remote_command: Option<String>,
     pub request_tty: RequestTTY, // -T no -t yes -tt force, default auto
-    // pub send_env: Vec<Pattern>,
+    pub send_env: Vec<pattern::Pattern>,
     // pub server_alive_count_max: u16, // default 3
     // pub server_alive_interval: u16, // default 0
     pub service: String,
@@ -365,6 +374,10 @@ impl fmt::Display for Options {
             Some(ref v) => write!(fmt, "remotecommand {}\n", v)?,
             None => write!(fmt, "remotecommand none\n")?,
         }
-        write!(fmt, "requesttty {}", self.request_tty)
+        write!(fmt, "requesttty {}\n", self.request_tty)?;
+        for pattern in &self.send_env {
+            write!(fmt, "sendenv {}\n", pattern)?;
+        }
+        Ok(())
     }
 }

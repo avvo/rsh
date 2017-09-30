@@ -61,6 +61,11 @@ impl Config {
     search!(protocol -> Protocol);
     search!(remote_command -> String);
     search!(request_tty -> RequestTTY);
+    pub fn send_env(&self, host: &str) -> Vec<pattern::Pattern> {
+        self.sections.iter()
+            .filter(|s| s.pattern.matches(host))
+            .flat_map(|s| s.send_env.to_owned()).collect()
+    }
     search!(service -> String);
     search!(stack -> String);
     search!(user -> String);
@@ -170,6 +175,16 @@ fn build_config(pairs: Vec<(&str, &str)>) -> Result<Config, Error> {
             "protocol" => assign!(key, current.protocol => value),
             "remotecommand" => assign!(key, current.remote_command => value),
             "requesttty" => assign!(key, current.request_tty => value),
+            "sendenv" => {
+                for val in value.split_whitespace() {
+                    match val.parse() {
+                        Ok(v) => current.send_env.push(v),
+                        Err(_) => {
+                            return Err(Error::OptionError(key.into(), val.into()));
+                        }
+                    }
+                }
+            }
             "service" => assign!(key, current.service => value),
             "stack" => assign!(key, current.stack => value),
             "user" => assign!(key, current.user => value),
@@ -191,6 +206,7 @@ struct Section {
     protocol: Option<Protocol>,
     remote_command: Option<String>,
     request_tty: Option<RequestTTY>,
+    send_env: Vec<pattern::Pattern>,
     service: Option<String>,
     stack: Option<String>,
     user: Option<String>,

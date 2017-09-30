@@ -1,3 +1,5 @@
+use std;
+use std::fmt;
 use std::str::FromStr;
 
 #[derive(Debug)]
@@ -12,7 +14,17 @@ enum Token {
     Char(char),
 }
 
-#[derive(Debug)]
+impl fmt::Display for Token {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> fmt::Result {
+        match *self {
+            Token::Any => "?".fmt(fmt),
+            Token::AnyRecurring => "*".fmt(fmt),
+            Token::Char(c) => c.fmt(fmt),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Pattern {
     tokens: Vec<Token>,
 }
@@ -65,6 +77,15 @@ impl Default for Pattern {
     }
 }
 
+impl fmt::Display for Pattern {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> fmt::Result {
+        for token in &self.tokens {
+            token.fmt(fmt)?;
+        }
+        Ok(())
+    }
+}
+
 impl FromStr for Pattern {
     type Err = Error;
 
@@ -103,9 +124,32 @@ pub struct PatternList {
     patterns: Vec<PatternListEntry>,
 }
 
+impl PatternList {
+    pub fn matches(&self, string: &str) -> bool {
+        for entry in self.patterns.iter() {
+            match entry {
+                &PatternListEntry::Positive(ref p) if p.matches(string) => return true,
+                &PatternListEntry::Negative(ref p) if p.matches(string) => return false,
+                _ => (),
+            };
+        }
+        false
+    }
+}
+
 impl Default for PatternList {
     fn default() -> PatternList {
         PatternList { patterns: vec![PatternListEntry::Positive(Pattern::default())] }
+    }
+}
+
+impl From<Vec<Pattern>> for PatternList {
+    fn from(source: Vec<Pattern>) -> PatternList {
+        let mut patterns = Vec::new();
+        for p in source {
+            patterns.push(PatternListEntry::Positive(p))
+        }
+        PatternList { patterns }
     }
 }
 
@@ -127,18 +171,5 @@ impl FromStr for PatternList {
         } else {
             Ok(PatternList { patterns })
         }
-    }
-}
-
-impl PatternList {
-    pub fn matches(&self, string: &str) -> bool {
-        for entry in self.patterns.iter() {
-            match entry {
-                &PatternListEntry::Positive(ref p) if p.matches(string) => return true,
-                &PatternListEntry::Negative(ref p) if p.matches(string) => return false,
-                _ => (),
-            };
-        }
-        false
     }
 }
