@@ -10,7 +10,6 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum Error {
-    CouldNotDetermineEnvironment,
     Empty,
     HttpError(reqwest::Error),
     Unauthorized,
@@ -25,7 +24,6 @@ impl From<reqwest::Error> for Error {
 impl StdError for Error {
     fn description(&self) -> &str {
         match *self {
-            Error::CouldNotDetermineEnvironment => "could not determine environment",
             Error::Empty => "empty",
             Error::HttpError(ref err) => err.description(),
             Error::Unauthorized => "unauthorized",
@@ -215,32 +213,17 @@ impl Client {
     pub fn executeable_container(
         &self,
         url: &url::Url,
-        environment: &Option<String>,
+        environment: &str,
         stack: &str,
         service: &str,
     ) -> Result<Container, Error> {
         let index = self.index(&url)?;
         let projects_link = index.links.get("projects").ok_or(Error::Empty)?;
-        let project = match environment {
-            &Some(ref e) => {
-                debug!("Searching for environment {}", e);
-                self.find_in_collection(
-                    projects_link,
-                    |p: &Project| &p.name == e,
-                )?
-            }
-            &None => {
-                let mut projects: Collection<Project> = self.get(&projects_link)?;
-                if projects.data.len() == 1 {
-                    let env = projects.data.remove(0);
-                    debug!("Using the only environment, {}", env.name);
-                    env
-                } else {
-                    debug!("Couldn't determine default environment, found {}", projects.data.len());
-                    return Err(Error::CouldNotDetermineEnvironment);
-                }
-            }
-        };
+        debug!("Searching for environment {}", environment);
+        let project = self.find_in_collection(
+            projects_link,
+            |p: &Project| &p.name == environment,
+        )?;
         debug!("Searching for stack {}", stack);
         let stacks_link = project.links.get("stacks").ok_or(Error::Empty)?;
         let stack = self.find_in_collection(

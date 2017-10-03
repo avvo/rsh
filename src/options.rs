@@ -10,6 +10,7 @@ use pattern;
 
 #[derive(Debug)]
 pub enum BuildError {
+    MissingEnvironment,
     MissingHostName,
     MissingService,
     MissingStack,
@@ -18,6 +19,7 @@ pub enum BuildError {
 impl std::error::Error for BuildError {
     fn description(&self) -> &str {
         match *self {
+            BuildError::MissingEnvironment => "no environment provided",
             BuildError::MissingHostName => "no hostname provided",
             BuildError::MissingService => "no service provided",
             BuildError::MissingStack => "no stack provided",
@@ -224,7 +226,7 @@ pub struct OptionsBuilder {
 impl OptionsBuilder {
     pub fn build(self) -> Result<Options, BuildError> {
         Ok(Options {
-            environment: self.environment,
+            environment: self.environment.ok_or(BuildError::MissingEnvironment)?,
             escape_char: self.escape_char,
             host_name: self.host_name.ok_or(BuildError::MissingHostName)?,
             log_level: self.log_level,
@@ -308,7 +310,7 @@ pub struct Options {
     // pub canonicalize_permitted_cnames: Vec<Rule>,
     // pub connection_attempts: u16, // default 1
     // pub connect_timeout: Option<u16>,
-    pub environment: Option<String>, // default None (picks the first if there's only one)
+    pub environment: String,
     pub escape_char: Option<char>, // -e default "~"
     pub host_name: String,
     // pub ignore_unknown: Vec<Pattern>,
@@ -360,10 +362,7 @@ impl fmt::Display for Options {
         write!(fmt, "user {}\n", self.user)?;
         write!(fmt, "hostname {}\n", self.host_name)?;
         write!(fmt, "port {}\n", self.port)?;
-        match self.environment {
-            Some(ref v) => write!(fmt, "environment {}\n", v)?,
-            None => write!(fmt, "environment none\n")?,
-        }
+        write!(fmt, "environment {}\n", self.environment)?;
         write!(fmt, "stack {}\n", self.stack)?;
         write!(fmt, "service {}\n", self.service)?;
         match self.escape_char {

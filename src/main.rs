@@ -328,16 +328,16 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
         option_builder.port(value);
     }
 
-    if let Some(value) = environment.or_else(|| config.environment(&host)) {
-        option_builder.environment(expand!(&value, 's' => service, 'S' => stack));
+    if let Some(value) = config.environment(&host).or(environment.clone()) {
+        option_builder.environment(expand!(&value, 's' => service, 'S' => stack, 'e' => environment));
     }
 
-    if let Some(value) = stack.or_else(|| config.stack(&host)) {
-        option_builder.stack(expand!(&value, 's' => service));
+    if let Some(value) = config.stack(&host).or(stack.clone()) {
+        option_builder.stack(expand!(&value, 's' => service, 'S' => stack, 'e' => environment));
     }
 
-    if let Some(value) = service.or_else(|| config.service(&host)) {
-        option_builder.service(value.into());
+    if let Some(value) = config.service(&host).or(service.clone()) {
+        option_builder.service(expand!(&value, 's' => service, 'S' => stack, 'e' => environment));
     }
 
     if let Some(escape_str) = matches.opt_str("e") {
@@ -380,6 +380,10 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
 
     let options = match option_builder.build() {
         Ok(v) => v,
+        Err(options::BuildError::MissingEnvironment) => {
+            verbose!("Missing environment.");
+            return ProgramStatus::FailureWithHelp;
+        }
         Err(options::BuildError::MissingHostName) => {
             verbose!("Missing host name.");
             return ProgramStatus::FailureWithHelp;
