@@ -35,6 +35,7 @@ mod options;
 mod pattern;
 mod prompt;
 mod rancher;
+mod token;
 
 use prompt::prompt_with_default;
 use rancher::{ContainerExec, HostAccess};
@@ -287,12 +288,23 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
         option_builder.user(value);
     }
 
-    if let Some(value) = config.host_name(&host).or_else(|| {
-        url.host_str().map(std::convert::Into::into)
-    })
-    {
-        option_builder.host_name(value);
-    }
+    let url_host = url.host_str().expect("cannot-be-a-base URL bypassed check?").into();
+    option_builder.host_name(
+        match config.host_name(&host) {
+            Some(value) => {
+                let mut subs = std::collections::HashMap::new();
+                subs.insert('h', url_host);
+                match token::expand(&value, subs) {
+                    Ok(v) => v,
+                    Err(c) => {
+                        fatal!("Unknown token %{}.", c);
+                        return ProgramStatus::Failure;
+                    }
+                }
+            }
+            None => url_host,
+        }
+    );
 
     if let Some(value) = url.port() {
         option_builder.port(value);
