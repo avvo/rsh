@@ -12,6 +12,7 @@ use pattern;
 pub enum BuildError {
     MissingHostName,
     MissingService,
+    MissingStack,
 }
 
 impl std::error::Error for BuildError {
@@ -19,6 +20,7 @@ impl std::error::Error for BuildError {
         match *self {
             BuildError::MissingHostName => "no hostname provided",
             BuildError::MissingService => "no service provided",
+            BuildError::MissingStack => "no stack provided",
         }
     }
 
@@ -221,7 +223,6 @@ pub struct OptionsBuilder {
 
 impl OptionsBuilder {
     pub fn build(self) -> Result<Options, BuildError> {
-        let service = self.service.ok_or(BuildError::MissingService)?;
         Ok(Options {
             environment: self.environment,
             escape_char: self.escape_char,
@@ -232,8 +233,8 @@ impl OptionsBuilder {
             remote_command: self.remote_command,
             request_tty: self.request_tty,
             send_env: self.send_env,
-            stack: self.stack.unwrap_or(service.clone()),
-            service,
+            service: self.service.ok_or(BuildError::MissingService)?,
+            stack: self.stack.ok_or(BuildError::MissingStack)?,
             user: self.user.or(users::get_current_username()).unwrap_or(String::from("root")),
         })
     }

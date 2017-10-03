@@ -40,6 +40,23 @@ mod token;
 use prompt::prompt_with_default;
 use rancher::{ContainerExec, HostAccess};
 
+macro_rules! expand( { $string:expr, $($token:expr => $replacement:expr),+ } => { {
+    let mut subs = std::collections::HashMap::new();
+    $(
+        match $replacement {
+            Some(ref v) => subs.insert($token, v.to_string()),
+            None => subs.insert($token, String::from("")),
+        };
+    )+
+    match ::token::expand($string, subs) {
+        Ok(v) => v,
+        Err(c) => {
+            fatal!("Unknown token %{}.", c);
+            return ProgramStatus::Failure;
+        }
+    }
+} } );
+
 const NAME: &'static str = env!("CARGO_PKG_NAME");
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -288,20 +305,10 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
         option_builder.user(value);
     }
 
-    let url_host = url.host_str().expect("cannot-be-a-base URL bypassed check?").into();
+    let url_host = url.host_str().expect("cannot-be-a-base URL bypassed check?").to_string();
     option_builder.host_name(
         match config.host_name(&host) {
-            Some(value) => {
-                let mut subs = std::collections::HashMap::new();
-                subs.insert('h', url_host);
-                match token::expand(&value, subs) {
-                    Ok(v) => v,
-                    Err(c) => {
-                        fatal!("Unknown token %{}.", c);
-                        return ProgramStatus::Failure;
-                    }
-                }
-            }
+            Some(value) => expand!(&value, 'h' => Some(&url_host)),
             None => url_host,
         }
     );
@@ -322,11 +329,11 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
     }
 
     if let Some(value) = environment.or_else(|| config.environment(&host)) {
-        option_builder.environment(value.into());
+        option_builder.environment(expand!(&value, 's' => service, 'S' => stack));
     }
 
     if let Some(value) = stack.or_else(|| config.stack(&host)) {
-        option_builder.stack(value.into());
+        option_builder.stack(expand!(&value, 's' => service));
     }
 
     if let Some(value) = service.or_else(|| config.service(&host)) {
@@ -379,6 +386,10 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
         }
         Err(options::BuildError::MissingService) => {
             verbose!("Missing service.");
+            return ProgramStatus::FailureWithHelp;
+        }
+        Err(options::BuildError::MissingStack) => {
+            verbose!("Missing stack.");
             return ProgramStatus::FailureWithHelp;
         }
     };
