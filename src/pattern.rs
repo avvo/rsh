@@ -31,43 +31,37 @@ pub struct Pattern {
 
 impl Pattern {
     pub fn matches(&self, string: &str) -> bool {
-        let mut current = 0;
-        let mut consumed = current;
-        let mut tokens = self.tokens.iter();
-        let mut token = tokens.next();
-        let chars = string.chars().collect::<Vec<_>>();
-        while current < chars.len() {
-            match token {
-                Some(&Token::Char(c)) => {
-                    if chars[current] == c {
-                        current += 1;
-                        consumed = current;
-                        token = tokens.next();
-                    } else if current > consumed {
-                        current -= 1;
-                    } else {
-                        return false;
-                    }
-                }
-                Some(&Token::Any) => {
-                    current += 1;
-                    consumed = current;
-                    token = tokens.next();
-                }
-                Some(&Token::AnyRecurring) => {
-                    current += 1;
-                    if current == chars.len() && current > consumed {
-                        current -= 1;
-                        token = tokens.next();
-                        if token.is_none() {
-                            return true;
-                        }
-                    }
-                }
-                None => return false,
-            }
+        self.do_match(&string.chars().collect::<Vec<char>>(), 0, 0)
+    }
+
+    fn do_match(&self, chars: &[char], current_char: usize, current_token: usize) -> bool {
+        if current_char >= chars.len() {
+            return match self.tokens.get(current_token) {
+                None => true,
+                Some(&Token::AnyRecurring) => self.tokens.get(current_token + 1).is_none(),
+                _ => false,
+            };
         }
-        token.is_none()
+        match self.tokens.get(current_token) {
+            Some(&Token::Char(c)) => {
+                if chars[current_char] == c {
+                    self.do_match(chars, current_char + 1, current_token + 1)
+                } else {
+                    false
+                }
+            }
+            Some(&Token::Any) => {
+                self.do_match(chars, current_char + 1, current_token + 1)
+            }
+            Some(&Token::AnyRecurring) => {
+                if self.do_match(chars, current_char + 1, current_token) {
+                    true
+                } else {
+                    self.do_match(chars, current_char, current_token + 1)
+                }
+            }
+            None => false,
+        }
     }
 }
 
