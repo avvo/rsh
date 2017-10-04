@@ -2,6 +2,7 @@ extern crate url;
 extern crate users;
 
 use std;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
@@ -14,6 +15,7 @@ pub enum BuildError {
     MissingHostName,
     MissingService,
     MissingStack,
+    UnknownToken(char),
 }
 
 impl std::error::Error for BuildError {
@@ -23,6 +25,7 @@ impl std::error::Error for BuildError {
             BuildError::MissingHostName => "no hostname provided",
             BuildError::MissingService => "no service provided",
             BuildError::MissingStack => "no stack provided",
+            BuildError::UnknownToken(_) => "unknown token",
         }
     }
 
@@ -209,6 +212,7 @@ impl FromStr for RequestTTY {
 
 #[derive(Default)]
 pub struct OptionsBuilder {
+    tokens: HashMap<char, String>,
     environment: Option<String>,
     escape_char: Option<char>,
     host_name: Option<String>,
@@ -224,21 +228,36 @@ pub struct OptionsBuilder {
 }
 
 impl OptionsBuilder {
-    pub fn build(self) -> Result<Options, BuildError> {
+    pub fn build(mut self) -> Result<Options, BuildError> {
+        let user = match self.user {
+            Some(ref v) => v.to_owned(),
+            None => users::get_current_username().unwrap_or("root".to_string())
+        };
+        self.token('r', user.clone());
+        let environment = expand(&self.environment.ok_or(BuildError::MissingEnvironment)?, &['e', 'S', 's'], &self.tokens)?;
+        let host_name = expand(&self.host_name.ok_or(BuildError::MissingHostName)?, &['h'], &self.tokens)?;
+        let remote_command = expand(&self.remote_command.unwrap_or("login -p -f %r".to_string()), &['r'], &self.tokens)?;
+        let stack = expand(&self.stack.ok_or(BuildError::MissingStack)?, &['e', 'S', 's'], &self.tokens)?;
+        let service = expand(&self.service.ok_or(BuildError::MissingService)?, &['e', 'S', 's'], &self.tokens)?;
         Ok(Options {
-            environment: self.environment.ok_or(BuildError::MissingEnvironment)?,
+            environment,
             escape_char: self.escape_char,
-            host_name: self.host_name.ok_or(BuildError::MissingHostName)?,
+            host_name,
             log_level: self.log_level,
             port: self.port.unwrap_or(self.protocol.default_port()),
             protocol: self.protocol,
-            remote_command: self.remote_command,
+            remote_command,
             request_tty: self.request_tty,
             send_env: self.send_env,
-            service: self.service.ok_or(BuildError::MissingService)?,
-            stack: self.stack.ok_or(BuildError::MissingStack)?,
-            user: self.user.or(users::get_current_username()).unwrap_or(String::from("root")),
+            service,
+            stack,
+            user,
         })
+    }
+
+    pub fn token<'a>(&'a mut self, token: char, replacement: String) -> &'a mut OptionsBuilder {
+        self.tokens.insert(token, replacement);
+        self
     }
 
     pub fn environment<'a>(&'a mut self, environment: String) -> &'a mut OptionsBuilder {
@@ -302,6 +321,30 @@ impl OptionsBuilder {
     }
 }
 
+fn expand(string: &str, allowed: &[char], map: &HashMap<char, String>) -> Result<String, BuildError> {
+    let mut replace_next = false;
+    let mut res = Vec::new();
+    for c in string.chars() {
+        if replace_next && c == '%' {
+            replace_next = false;
+            res.push(c);
+        } else if replace_next && allowed.contains(&c) {
+            replace_next = false;
+            match map.get(&c) {
+                Some(string) => res.extend(string.chars()),
+                None => res.extend(&['%', c]),
+            };
+        } else if replace_next {
+            return Err(BuildError::UnknownToken(c));
+        } else if c == '%' {
+            replace_next = true;
+        } else {
+            res.push(c);
+        }
+    }
+    Ok(res.iter().collect())
+}
+
 pub struct Options {
     // pub canonical_domains: Vec<String>,
     // pub canonicalize_fallback_local: bool, // default true
@@ -322,7 +365,7 @@ pub struct Options {
     pub protocol: Protocol, // default https
     // pub proxy_command: Option<String>,
     // pub proxy_use_fdpass: bool, // default false
-    pub remote_command: Option<String>,
+    pub remote_command: String,
     pub request_tty: RequestTTY, // -T no -t yes -tt force, default auto
     pub send_env: Vec<pattern::Pattern>,
     // pub server_alive_count_max: u16, // default 3
@@ -370,10 +413,7 @@ impl fmt::Display for Options {
             None => write!(fmt, "escapechar none\n")?,
         }
         write!(fmt, "loglevel {}\n", self.log_level)?;
-        match self.remote_command {
-            Some(ref v) => write!(fmt, "remotecommand {}\n", v)?,
-            None => write!(fmt, "remotecommand none\n")?,
-        }
+        write!(fmt, "remotecommand {}\n", self.remote_command)?;
         write!(fmt, "requesttty {}\n", self.request_tty)?;
         for pattern in &self.send_env {
             write!(fmt, "sendenv {}\n", pattern)?;

@@ -35,27 +35,9 @@ mod options;
 mod pattern;
 mod prompt;
 mod rancher;
-mod token;
 
 use prompt::prompt_with_default;
 use rancher::{ContainerExec, HostAccess};
-
-macro_rules! expand( { $string:expr, $($token:expr => $replacement:expr),+ } => { {
-    let mut subs = std::collections::HashMap::new();
-    $(
-        match $replacement {
-            Some(ref v) => subs.insert($token, v.to_string()),
-            None => subs.insert($token, String::from("")),
-        };
-    )+
-    match ::token::expand($string, subs) {
-        Ok(v) => v,
-        Err(c) => {
-            fatal!("Unknown token %{}.", c);
-            return ProgramStatus::Failure;
-        }
-    }
-} } );
 
 const NAME: &'static str = env!("CARGO_PKG_NAME");
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -286,6 +268,16 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
 
     let mut option_builder = options::OptionsBuilder::default();
 
+    if let Some(ref value) = environment {
+        option_builder.token('e', value.to_owned());
+    }
+    if let Some(ref value) = stack {
+        option_builder.token('S', value.to_owned());
+    }
+    if let Some(ref value) = service {
+        option_builder.token('s', value.to_owned());
+    }
+
     // log level was set as early as possible, make sure the options stay in
     // sync
     option_builder.log_level(log::level());
@@ -305,13 +297,9 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
         option_builder.user(value);
     }
 
-    let url_host = url.host_str().expect("cannot-be-a-base URL bypassed check?").to_string();
-    option_builder.host_name(
-        match config.host_name(&host) {
-            Some(value) => expand!(&value, 'h' => Some(&url_host)),
-            None => url_host,
-        }
-    );
+    let url_host = url.host_str().expect("cannot-be-a-base URL bypassed check?");
+    option_builder.token('h', url_host.to_string());
+    option_builder.host_name(config.host_name(&host).unwrap_or(url_host.to_string()));
 
     if let Some(value) = url.port() {
         option_builder.port(value);
@@ -328,16 +316,16 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
         option_builder.port(value);
     }
 
-    if let Some(value) = config.environment(&host).or(environment.clone()) {
-        option_builder.environment(expand!(&value, 's' => service, 'S' => stack, 'e' => environment));
+    if let Some(value) = config.environment(&host).or(environment) {
+        option_builder.environment(value.into());
     }
 
-    if let Some(value) = config.stack(&host).or(stack.clone()) {
-        option_builder.stack(expand!(&value, 's' => service, 'S' => stack, 'e' => environment));
+    if let Some(value) = config.stack(&host).or(stack) {
+        option_builder.stack(value.into());
     }
 
-    if let Some(value) = config.service(&host).or(service.clone()) {
-        option_builder.service(expand!(&value, 's' => service, 'S' => stack, 'e' => environment));
+    if let Some(value) = config.service(&host).or(service) {
+        option_builder.service(value.into());
     }
 
     if let Some(escape_str) = matches.opt_str("e") {
@@ -395,6 +383,10 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
         Err(options::BuildError::MissingStack) => {
             verbose!("Missing stack.");
             return ProgramStatus::FailureWithHelp;
+        }
+        Err(options::BuildError::UnknownToken(c)) => {
+            fatal!("Unknown token %{}.", c);
+            return ProgramStatus::Failure;
         }
     };
 
@@ -479,14 +471,9 @@ fn run_with_options(options: options::Options) -> ProgramStatus {
 
     let is_tty = match options.request_tty {
         options::RequestTTY::Force => true,
-        options::RequestTTY::Auto => options.remote_command.is_none(),
+        options::RequestTTY::Auto => options.remote_command.starts_with("login -p -f "),
         options::RequestTTY::Yes => termion::is_tty(&std::fs::File::create("/dev/stdout").unwrap()),
         options::RequestTTY::No => false,
-    };
-
-    let command = match options.remote_command {
-        Some(ref v) => v.clone(),
-        None => format!("login -p -f {}", options.user),
     };
 
     let mut command_parts = Vec::new();
@@ -507,11 +494,11 @@ fn run_with_options(options: options::Options) -> ProgramStatus {
         };
         command_parts.push(format!(
             "([ -x /usr/bin/script ] && /usr/bin/script -q -c {} /dev/null || exec {})",
-            shell_escape::escape(command.clone().into()),
-            command
+            shell_escape::escape(options.remote_command.clone().into()),
+            options.remote_command
         ));
     } else {
-        command_parts.push(command);
+        command_parts.push(options.remote_command);
     }
 
     let exec = vec![
