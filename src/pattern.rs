@@ -50,9 +50,7 @@ impl Pattern {
                     false
                 }
             }
-            Some(&Token::Any) => {
-                self.do_match(chars, current_char + 1, current_token + 1)
-            }
+            Some(&Token::Any) => self.do_match(chars, current_char + 1, current_token + 1),
             Some(&Token::AnyRecurring) => {
                 if self.do_match(chars, current_char + 1, current_token) {
                     true

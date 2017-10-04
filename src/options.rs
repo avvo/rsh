@@ -231,14 +231,34 @@ impl OptionsBuilder {
     pub fn build(mut self) -> Result<Options, BuildError> {
         let user = match self.user {
             Some(ref v) => v.to_owned(),
-            None => users::get_current_username().unwrap_or("root".to_string())
+            None => users::get_current_username().unwrap_or("root".to_string()),
         };
         self.token('r', user.clone());
-        let environment = expand(&self.environment.ok_or(BuildError::MissingEnvironment)?, &['e', 'S', 's'], &self.tokens)?;
-        let host_name = expand(&self.host_name.ok_or(BuildError::MissingHostName)?, &['h'], &self.tokens)?;
-        let remote_command = expand(&self.remote_command.unwrap_or("login -p -f %r".to_string()), &['r'], &self.tokens)?;
-        let stack = expand(&self.stack.ok_or(BuildError::MissingStack)?, &['e', 'S', 's'], &self.tokens)?;
-        let service = expand(&self.service.ok_or(BuildError::MissingService)?, &['e', 'S', 's'], &self.tokens)?;
+        let environment = expand(
+            &self.environment.ok_or(BuildError::MissingEnvironment)?,
+            &['e', 'S', 's'],
+            &self.tokens,
+        )?;
+        let host_name = expand(
+            &self.host_name.ok_or(BuildError::MissingHostName)?,
+            &['h'],
+            &self.tokens,
+        )?;
+        let remote_command = expand(
+            &self.remote_command.unwrap_or("login -p -f %r".to_string()),
+            &['r'],
+            &self.tokens,
+        )?;
+        let stack = expand(
+            &self.stack.ok_or(BuildError::MissingStack)?,
+            &['e', 'S', 's'],
+            &self.tokens,
+        )?;
+        let service = expand(
+            &self.service.ok_or(BuildError::MissingService)?,
+            &['e', 'S', 's'],
+            &self.tokens,
+        )?;
         Ok(Options {
             environment,
             escape_char: self.escape_char,
@@ -321,7 +341,11 @@ impl OptionsBuilder {
     }
 }
 
-fn expand(string: &str, allowed: &[char], map: &HashMap<char, String>) -> Result<String, BuildError> {
+fn expand(
+    string: &str,
+    allowed: &[char],
+    map: &HashMap<char, String>,
+) -> Result<String, BuildError> {
     let mut replace_next = false;
     let mut res = Vec::new();
     for c in string.chars() {

@@ -62,9 +62,11 @@ impl Config {
     search!(remote_command -> String);
     search!(request_tty -> RequestTTY);
     pub fn send_env(&self, host: &str) -> Vec<pattern::Pattern> {
-        self.sections.iter()
+        self.sections
+            .iter()
             .filter(|s| s.pattern.matches(host))
-            .flat_map(|s| s.send_env.to_owned()).collect()
+            .flat_map(|s| s.send_env.to_owned())
+            .collect()
     }
     search!(service -> String);
     search!(stack -> String);
@@ -81,7 +83,7 @@ impl Config {
                 nom::IResult::Error(e) => return Err(Error::from(e)),
                 nom::IResult::Incomplete(_) => return Err(Error::UnexpectedEnd),
             };
-        };
+        }
         build_config(parsed)
     }
 

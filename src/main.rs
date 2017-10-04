@@ -62,7 +62,12 @@ fn main() {
         "LOGFILE",
     );
     opts.optopt("e", "", "Sets the escape character (default: `~')", "CHAR");
-    opts.optopt("F", "", "Specifies an alternative configuration file", "CONFIGFILE");
+    opts.optopt(
+        "F",
+        "",
+        "Specifies an alternative configuration file",
+        "CONFIGFILE",
+    );
     opts.optflag("G", "", "Print the configuration and exit");
     opts.optopt(
         "l",
@@ -90,10 +95,15 @@ fn main() {
 
     match run(matches) {
         ProgramStatus::Success => (),
-        ProgramStatus::SuccessWithHelp => print!("{}", opts.usage(&format!(
-            "Usage: {} [opts] [protocol://][user@]host[:port][[/env]/stack]/service [cmd]",
-            program
-        ))),
+        ProgramStatus::SuccessWithHelp => {
+            print!(
+                "{}",
+                opts.usage(&format!(
+                    "Usage: {} [opts] [protocol://][user@]host[:port][[/env]/stack]/service [cmd]",
+                    program
+                ))
+            )
+        }
         ProgramStatus::Failure => std::process::exit(1),
         ProgramStatus::FailureWithHelp => {
             eprint!("{}", opts.short_usage(&program));
@@ -155,21 +165,16 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
     };
 
     let config = {
-        let mut acc = match config::Config::try_from(matches.opt_strs("o").iter().map(AsRef::as_ref).collect()) {
+        let mut acc = match config::Config::try_from(
+            matches.opt_strs("o").iter().map(AsRef::as_ref).collect(),
+        ) {
             Ok(v) => v,
             Err(config::Error::OptionError(key, value)) => {
-                fatal!(
-                    "Bad configuration option: \"{}\" for {}.",
-                    value,
-                    key
-                );
+                fatal!("Bad configuration option: \"{}\" for {}.", value, key);
                 return ProgramStatus::Failure;
             }
             Err(config::Error::UnknownOption(key)) => {
-                fatal!(
-                    "Bad configuration option: {}.",
-                    key
-                );
+                fatal!("Bad configuration option: {}.", key);
                 return ProgramStatus::Failure;
             }
             Err(config::Error::OptionNotAllowed(key)) => {
@@ -186,13 +191,13 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
             match config::open_config(&path) {
                 Ok(v) => acc = acc.append(v),
                 Err(config::Error::OptionError(key, value)) => {
-                  fatal!(
-                      "{}: Bad configuration option: \"{}\" for {}.",
-                      path.to_string_lossy(),
-                      value,
-                      key
-                  );
-                  return ProgramStatus::Failure;
+                    fatal!(
+                        "{}: Bad configuration option: \"{}\" for {}.",
+                        path.to_string_lossy(),
+                        value,
+                        key
+                    );
+                    return ProgramStatus::Failure;
                 }
                 Err(config::Error::UnknownOption(key)) => {
                     fatal!(
@@ -203,10 +208,7 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
                     return ProgramStatus::Failure;
                 }
                 Err(config::Error::IoError(_)) => {
-                    fatal!(
-                        "{}: Error reading config.",
-                        path.to_string_lossy()
-                    );
+                    fatal!("{}: Error reading config.", path.to_string_lossy());
                     return ProgramStatus::Failure;
                 }
                 _ => {
@@ -214,7 +216,7 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
                     return ProgramStatus::Failure;
                 }
             }
-        };
+        }
         acc
     };
 
@@ -297,7 +299,9 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
         option_builder.user(value);
     }
 
-    let url_host = url.host_str().expect("cannot-be-a-base URL bypassed check?");
+    let url_host = url.host_str().expect(
+        "cannot-be-a-base URL bypassed check?",
+    );
     option_builder.token('h', url_host.to_string());
     option_builder.host_name(config.host_name(&host).unwrap_or(url_host.to_string()));
 
@@ -402,7 +406,10 @@ fn run_with_options(options: options::Options) -> ProgramStatus {
     let mut client = rancher::Client::new();
 
     let api_key_path = config::api_key_path(&options.host_with_port());
-    debug!("Reading Rancher API key from {}", api_key_path.to_string_lossy());
+    debug!(
+        "Reading Rancher API key from {}",
+        api_key_path.to_string_lossy()
+    );
     match std::fs::File::open(&api_key_path).map(std::io::BufReader::new) {
         Ok(mut reader) => {
             let mut string = String::new();
@@ -414,7 +421,12 @@ fn run_with_options(options: options::Options) -> ProgramStatus {
                 debug!("Using Rancher API key {}", key.public_value);
             }
         }
-        Err(_) => debug!("{} No such file or directory", api_key_path.to_string_lossy()),
+        Err(_) => {
+            debug!(
+                "{} No such file or directory",
+                api_key_path.to_string_lossy()
+            )
+        }
     };
 
     let mut tries = 0;
@@ -611,7 +623,10 @@ Supported escape sequences:\r
     receiver
 }
 
-fn connect(websocket_url: url::Url, stdin: futures::sync::mpsc::Receiver<websocket::OwnedMessage>) -> ProgramStatus {
+fn connect(
+    websocket_url: url::Url,
+    stdin: futures::sync::mpsc::Receiver<websocket::OwnedMessage>,
+) -> ProgramStatus {
     let mut core = tokio_core::reactor::Core::new().unwrap();
     let mut stdout = std::io::stdout();
 
@@ -629,9 +644,7 @@ fn connect(websocket_url: url::Url, stdin: futures::sync::mpsc::Receiver<websock
                         stdout.flush().unwrap();
                         None
                     }
-                    websocket::OwnedMessage::Close(e) => Some(
-                        websocket::OwnedMessage::Close(e),
-                    ),
+                    websocket::OwnedMessage::Close(e) => Some(websocket::OwnedMessage::Close(e)),
                     websocket::OwnedMessage::Ping(d) => Some(websocket::OwnedMessage::Pong(d)),
                     _ => None,
                 }),
