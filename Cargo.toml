@@ -2,6 +2,7 @@
 name = "rsh"
 version = "0.1.0-alpha2"
 authors = ["Avvo Infrastructure Team <infrastructure@avvo.com>"]
+license = "MIT"
 
 [dependencies]
 base64 = "0.6"
