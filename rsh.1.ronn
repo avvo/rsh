@@ -1,0 +1,187 @@
+rsh(1) -- Rancher SHell
+=======================
+
+## SYNOPSIS
+
+`rsh` [`-GqTtv`]
+      [`-E` <log_file>]
+      [`-e` <char>]
+      [`-F` <config_file>]
+      [`-h`|`--help`]
+      [`-l` <login_name>]
+      [`-o` <option>]
+      [`-p` <port>]
+      [`-V`|`--version`]
+      [<protocol>://][<user>@]<host>[:<port>][[/<environment>]/<stack>]/<service>
+      [<command>]
+
+## DESCRIPTION
+
+**rsh** aims to replicate the features and experience of ssh, but for docker
+containers running within Rancher, as such it is a program for connecting into
+a remote container and for executing commands on a remote container.
+
+**rsh** queries the Rancher API at <host> to find a container within the
+specified <environment>, <stack>, and <service> then connects to the first
+available container.
+
+If <command> is specified, it is executed on the remote host instead of a login
+shell.
+
+## OPTIONS
+
+  * `-E` <log_file>:
+    Append debug logs to <log_file> instead of standard error.
+
+  * `-e` <char>:
+    Sets the escape character for sessions with a pty (default: `~'). The
+    escape character is only recognised at the beginning of a line. The escape
+    character followed by a dot (`.') closes the connection; followed by
+    control-Z suspends the connection; and followed by itself sends the escape
+    character once. Setting the character to ``none'' disables any escapes and
+    makes the session fully transparent.
+
+  * `-F` <config_file>:
+    Specifies an alternative per-user configuration file. If a configuration
+    file is given on the command line, the system-wide configuration file
+    (</etc/rsh/rsh_config>) will be ignored. The default for the per-user
+    configuration file is <~/.rsh/config>.
+
+  * `-G`:
+    Causes **rsh** to print its configuration after evaluating Host blocks and
+    exit.
+
+  * `-h`, `--help`:
+    Causes **rsh** to print a short help message and exit.
+
+  * `-l` <login_name>:
+    Specifies the user to log in as on the remote machine. This also may be
+    specified on a per-host basis in the configuration file.
+
+  * `-o` <option>:
+    Can be used to give options in the format used in the configuration file.
+    This is useful for specifying options for which there is no separate
+    command-line flag. For full details of the options listed below, and their
+    possible values, see rsh_config(5).
+
+        Environment
+        EscapeChar
+        HostName
+        LogLevel
+        Port
+        Protocol
+        RemoteCommand
+        RequestTty
+        SendEnv
+        Service
+        Stack
+        User
+
+  * `-p` <port>:
+    Port to connect to on the remote host. This can be specified on a per-host
+    basis in the configuration file.
+
+  * `-q`:
+    Quiet mode. Causes most warning and diagnostic messages to be suppressed.
+
+  * `-T`:
+    Disable pseudo-terminal allocation.
+
+  * `-t`:
+    Force pseudo-terminal allocation. This can be useful when executing a shell
+    or console program directly, rather than performing a login. Multiple -t
+    options force tty allocation, even if rsh has no local tty.
+
+  * `-V`, `--version`:
+    Display the version number and exit.
+
+  * `-v`:
+    Verbose mode. Causes **rsh** to print debugging messages about its progress.
+    This is helpful in debugging connection, authentication, and configuration
+    problems. Multiple -v options increase the verbosity. The maximum is 3.
+
+## EXAMPLES
+
+Start a login shell as the <root> user on a container in the <api> service of
+the <web> stack in the <production> environment of <https://example.com>. The
+current directory will be the home directory of the root user:
+
+    rsh https://root@example.com/production/web/api
+
+Execute a shell directly on a container in the <api> service of the <web> stack
+in the <production> environment of <https://example.com>. The user and working 
+directory will match those configured in the service's Dockerfile:
+
+    rsh -t https://example.com/production/web/api /bin/sh
+
+## AUTHENTICATION
+
+Upon first connecting to a Rancher server that requires authentication **rsh**
+will request a username and password to log into the Rancher server. It will
+then create a user API key, and save this to <~/.rsh/<host>>, using the API key
+for all further requests.
+
+Currently only LDAP authenticated and unauthenticated Rancher servers have been
+tested.
+
+## ESCAPE CHARACTERS
+
+When a pseudo-terminal has been requested, **rsh** supports a number of
+functions through the use of an escape character.
+
+A single tilde character can be sent as ~~ or by following the tilde by a
+character other than those described below. The escape character must always
+follow a newline to be interpreted as special. The escape character can be
+changed in configuration files using the **EscapeChar** configuration directive
+or on the command line by the `-e` option.
+
+The supported escapes (assuming the default `~') are:
+
+  * `~.`:
+    Disconnect.
+
+  * `~^Z`:
+    Background rsh.
+
+  * `~?`:
+    Display a list of escape characters.
+
+  * `~V`:
+    Decrease the verbosity (LogLevel) when errors are being written to stderr.
+
+  * `~v`:
+    Increase the verbosity (LogLevel) when errors are being written to stderr.
+
+## FILES
+
+  * `~/.rsh/`:
+    This directory is the default location for all user-specific configuration
+    and authentication information.
+
+  * `~/.rsh/config`:
+    This is the per-user configuration file. The file format and configuration
+    options are described in rsh_config(5).
+
+  * `/etc/rsh/rsh_config`:
+    Systemwide configuration file. The file format and configuration options
+    are described in rsh_config(5).
+
+## ENVIRONMENT
+
+**rsh** will normally set the following environment variables:
+
+* `TERM`:
+   Set to the value of `TERM` on the client machine.
+
+Additional environment variables can be forwarded by setting the **SendEnv**
+option in rsh_config(5).
+
+## AUTHORS
+
+**avvoenv** is heavily inspired by OpenSSH, and portions of the man page have
+been directly copied. It is written and maintained by the Avvo Infrastructure
+Team <infrastructure@avvo.com>.
+
+## SEE ALSO
+
+rsh_config(5)
