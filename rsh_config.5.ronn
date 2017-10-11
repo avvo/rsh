@@ -3,7 +3,7 @@ rsh_config(5) -- rsh configuration
 
 ## SYNOPSIS
 
-**~/.rsh/config**
+**~/.rsh/config**  
 **/etc/rsh/rsh_config**
 
 ## DESCRIPTION
@@ -12,25 +12,25 @@ rsh(1) obtains configuration data from the following sources in the following
 order:
 
   1. command-line options
-  2. user's configuration file (<~/.rsh/config>)
-  3. system-wide configuration file (</etc/rsh/rsh_config>)
+  2. user's configuration file (_~/.rsh/config_)
+  3. system-wide configuration file (_/etc/rsh/rsh_config_)
 
 For each parameter, the first obtained value will be used. The configuration
 files contain sections separated by Host specifications, and that section is
 only applied for hosts that match one of the patterns given in the
 specification. The matched host name is the complete
-<protocol://user@host:port/env/stack/service> line given on the command line.
+_protocol://user@host:port/env/stack/service_ line given on the command line.
 
 Since the first obtained value for each parameter is used, more host-specific
 declarations should be given near the beginning of the file, and general
 defaults at the end.
 
 The file contains keyword-argument pairs, one per line. Lines starting with
-`#' and empty lines are interpreted as comments. Arguments may optionally be
+'#' and empty lines are interpreted as comments. Arguments may optionally be
 enclosed in double quotes (") in order to represent arguments containing spaces.
 Configuration options may be separated by whitespace or optional whitespace and
-exactly one `='; the latter format is useful to avoid the need to quote
-whitespace when specifying configuration options using -o.
+exactly one '='; the latter format is useful to avoid the need to quote
+whitespace when specifying configuration options using `-o`.
 
 The possible keywords and their meanings are as follows (note that keywords are
 case-insensitive and arguments are case-sensitive):
@@ -39,25 +39,25 @@ case-insensitive and arguments are case-sensitive):
     Restricts the following declarations (up to the next `Host` keyword) to be
     only for those hosts that match one of the patterns given after the
     keyword. If more than one pattern is provided, they should be separated by
-    whitespace. A single `*' as a pattern can be used to provide global
+    whitespace. A single '*' as a pattern can be used to provide global
     defaults for all hosts. The host is the complete
-    <protocol://user@host:port/env/stack/service> line given on the command
+    _protocol://user@host:port/env/stack/service_ line given on the command
     line.
 
     A pattern entry may be negated by prefixing it with an exclamation mark
-    (`!'). If a negated entry is matched, then the `Host` entry is ignored,
+    ('!'). If a negated entry is matched, then the `Host` entry is ignored,
     regardless of whether any other patterns on the line match. Negated matches
     are therefore useful to provide exceptions for wildcard matches.
 
-    See <PATTERNS> for more information on patterns.
+    See _PATTERNS_ for more information on patterns.
 
   * `Environment`:
     Specifies the Rancher environment of the container to log in to. Arguments
-    to `Environment` accept the tokens described in the <TOKENS> section. The
+    to `Environment` accept the tokens described in the _TOKENS_ section. The
     default is the name given on the command line.
 
   * `EscapeChar`:
-    Sets the escape character (default: `~'). The escape character can also be
+    Sets the escape character (default: '~'). The escape character can also be
     set on the command line. The argument should be a single character, or
     `none` to disable the escape character entirely (making the connection
     transparent for binary data).
@@ -65,7 +65,7 @@ case-insensitive and arguments are case-sensitive):
   * `HostName`:
     Specifies the real host name to log into. This can be used to specify
     nicknames or abbreviations for hosts. Arguments to `HostName` accept the
-    tokens described in the <TOKENS> section. Numeric IP addresses are also
+    tokens described in the _TOKENS_ section. Numeric IP addresses are also
     permitted (both on the command line and in `HostName` specifications). The
     default is the name given on the command line.
 
@@ -86,7 +86,7 @@ case-insensitive and arguments are case-sensitive):
   * `RemoteCommand`:
     Specifies the command to execute on the remote host instead of a login
     shell. Arguments to `RemoteCommand` accept the tokens described in the
-    <TOKENS> section. This can also be specified with the final argument on the
+    _TOKENS_ section. This can also be specified with the final argument on the
     command line.
 
   * `RequestTTY`:
@@ -105,16 +105,16 @@ case-insensitive and arguments are case-sensitive):
     multiple SendEnv directives. The default is not to send any environment
     variables.
 
-    See <PATTERNS> for more information on patterns.
+    See _PATTERNS_ for more information on patterns.
 
   * `Service`:
     Specifies the Rancher service of the container to log in to. Arguments to
-    `Service` accept the tokens described in the <TOKENS> section. The default
+    `Service` accept the tokens described in the _TOKENS_ section. The default
     is the name given on the command line.
 
   * `Stack`:
     Specifies the Rancher stack of the container to log in to. Arguments to
-    `Stack` accept the tokens described in the <TOKENS> section. The default is
+    `Stack` accept the tokens described in the _TOKENS_ section. The default is
     the name given on the command line.
 
   * `User`:
@@ -124,8 +124,8 @@ case-insensitive and arguments are case-sensitive):
 
 ## PATTERNS
 
-A pattern consists of zero or more non-whitespace characters, `*' (a wildcard
-that matches zero or more characters), or `?' (a wildcard that matches exactly
+A pattern consists of zero or more non-whitespace characters, '*' (a wildcard
+that matches zero or more characters), or '?' (a wildcard that matches exactly
 one character). For example, to specify a set of declarations for any host in
 the ".co.uk" set of domains, the following pattern could be used:
 
@@ -136,7 +136,7 @@ The following pattern would match any host in the 192.168.0.[0-9] network range:
     Host *192.168.0.?/*
 
 A pattern-list is a comma-separated list of patterns. Patterns within
-pattern-lists may be negated by preceding them with an exclamation mark (`!'). 
+pattern-lists may be negated by preceding them with an exclamation mark ('!'). 
 For example, to match all hosts except production the following entry could be
 used:
 
@@ -147,7 +147,7 @@ used:
 Arguments to some keywords can make use of tokens, which are expanded at
 runtime:
 
-          %%    A literal `%'.
+          %%    A literal '%'.
           %e    The remote environment.
           %h    The remote hostname.
           %r    The remote username.

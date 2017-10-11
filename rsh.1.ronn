@@ -9,7 +9,7 @@ rsh(1) -- Rancher SHell
       [`-F` <config_file>]
       [`-h`|`--help`]
       [`-l` <login_name>]
-      [`-o` <option>]
+      [`-o` <opt>]
       [`-p` <port>]
       [`-V`|`--version`]
       [<protocol>://][<user>@]<host>[:<port>][[/<environment>]/<stack>]/<service>
@@ -34,18 +34,18 @@ shell.
     Append debug logs to <log_file> instead of standard error.
 
   * `-e` <char>:
-    Sets the escape character for sessions with a pty (default: `~'). The
+    Sets the escape character for sessions with a pty (default: '~'). The
     escape character is only recognised at the beginning of a line. The escape
-    character followed by a dot (`.') closes the connection; followed by
+    character followed by a dot ('.') closes the connection; followed by
     control-Z suspends the connection; and followed by itself sends the escape
-    character once. Setting the character to ``none'' disables any escapes and
+    character once. Setting the character to "none" disables any escapes and
     makes the session fully transparent.
 
   * `-F` <config_file>:
     Specifies an alternative per-user configuration file. If a configuration
     file is given on the command line, the system-wide configuration file
-    (</etc/rsh/rsh_config>) will be ignored. The default for the per-user
-    configuration file is <~/.rsh/config>.
+    (_/etc/rsh/rsh_config_) will be ignored. The default for the per-user
+    configuration file is _~/.rsh/config_.
 
   * `-G`:
     Causes **rsh** to print its configuration after evaluating Host blocks and
@@ -58,7 +58,7 @@ shell.
     Specifies the user to log in as on the remote machine. This also may be
     specified on a per-host basis in the configuration file.
 
-  * `-o` <option>:
+  * `-o` <opt>:
     Can be used to give options in the format used in the configuration file.
     This is useful for specifying options for which there is no separate
     command-line flag. For full details of the options listed below, and their
@@ -89,7 +89,7 @@ shell.
 
   * `-t`:
     Force pseudo-terminal allocation. This can be useful when executing a shell
-    or console program directly, rather than performing a login. Multiple -t
+    or console program directly, rather than performing a login. Multiple `-t`
     options force tty allocation, even if rsh has no local tty.
 
   * `-V`, `--version`:
@@ -98,7 +98,7 @@ shell.
   * `-v`:
     Verbose mode. Causes **rsh** to print debugging messages about its progress.
     This is helpful in debugging connection, authentication, and configuration
-    problems. Multiple -v options increase the verbosity. The maximum is 3.
+    problems. Multiple `-v` options increase the verbosity. The maximum is 3.
 
 ## EXAMPLES
 
@@ -118,7 +118,7 @@ directory will match those configured in the service's Dockerfile:
 
 Upon first connecting to a Rancher server that requires authentication **rsh**
 will request a username and password to log into the Rancher server. It will
-then create a user API key, and save this to <~/.rsh/<host>>, using the API key
+then create a user API key, and save this to _~/.rsh/<host>_, using the API key
 for all further requests.
 
 Currently only LDAP authenticated and unauthenticated Rancher servers have been
@@ -135,7 +135,7 @@ follow a newline to be interpreted as special. The escape character can be
 changed in configuration files using the **EscapeChar** configuration directive
 or on the command line by the `-e` option.
 
-The supported escapes (assuming the default `~') are:
+The supported escapes (assuming the default '~') are:
 
   * `~.`:
     Disconnect.
@@ -147,10 +147,10 @@ The supported escapes (assuming the default `~') are:
     Display a list of escape characters.
 
   * `~V`:
-    Decrease the verbosity (LogLevel) when errors are being written to stderr.
+    Decrease the verbosity (`LogLevel`) when errors are being written to stderr.
 
   * `~v`:
-    Increase the verbosity (LogLevel) when errors are being written to stderr.
+    Increase the verbosity (`LogLevel`) when errors are being written to stderr.
 
 ## FILES
 
