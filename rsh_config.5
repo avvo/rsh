@@ -1,0 +1,194 @@
+.ad l
+.\" generated with Ronn/v0.7.3
+.\" http://github.com/rtomayko/ronn/tree/0.7.3
+.
+.TH "RSH_CONFIG" "5" "October 2017" "" ""
+.
+.SH "NAME"
+\fBrsh_config\fR \- rsh configuration
+.
+.SH "SYNOPSIS"
+\fB~/\.rsh/config\fR
+.
+.br
+\fB/etc/rsh/rsh_config\fR
+.
+.SH "DESCRIPTION"
+rsh(1) obtains configuration data from the following sources in the following order:
+.
+.IP "1." 4
+command\-line options
+.
+.IP "2." 4
+user\'s configuration file (\fI~/\.rsh/config\fR)
+.
+.IP "3." 4
+system\-wide configuration file (\fI/etc/rsh/rsh_config\fR)
+.
+.IP "" 0
+.
+.P
+For each parameter, the first obtained value will be used\. The configuration files contain sections separated by Host specifications, and that section is only applied for hosts that match one of the patterns given in the specification\. The matched host name is the complete \fIprotocol://user@host:port/env/stack/service\fR line given on the command line\.
+.
+.P
+Since the first obtained value for each parameter is used, more host\-specific declarations should be given near the beginning of the file, and general defaults at the end\.
+.
+.P
+The file contains keyword\-argument pairs, one per line\. Lines starting with \'#\' and empty lines are interpreted as comments\. Arguments may optionally be enclosed in double quotes (") in order to represent arguments containing spaces\. Configuration options may be separated by whitespace or optional whitespace and exactly one \'=\'; the latter format is useful to avoid the need to quote whitespace when specifying configuration options using \fB\-o\fR\.
+.
+.P
+The possible keywords and their meanings are as follows (note that keywords are case\-insensitive and arguments are case\-sensitive):
+.
+.TP
+\fBHost\fR
+Restricts the following declarations (up to the next \fBHost\fR keyword) to be only for those hosts that match one of the patterns given after the keyword\. If more than one pattern is provided, they should be separated by whitespace\. A single \'*\' as a pattern can be used to provide global defaults for all hosts\. The host is the complete \fIprotocol://user@host:port/env/stack/service\fR line given on the command line\.
+.
+.IP
+A pattern entry may be negated by prefixing it with an exclamation mark (\'!\')\. If a negated entry is matched, then the \fBHost\fR entry is ignored, regardless of whether any other patterns on the line match\. Negated matches are therefore useful to provide exceptions for wildcard matches\.
+.
+.IP
+See \fIPATTERNS\fR for more information on patterns\.
+.
+.TP
+\fBEnvironment\fR
+Specifies the Rancher environment of the container to log in to\. Arguments to \fBEnvironment\fR accept the tokens described in the \fITOKENS\fR section\. The default is the name given on the command line\.
+.
+.TP
+\fBEscapeChar\fR
+Sets the escape character (default: \'~\')\. The escape character can also be set on the command line\. The argument should be a single character, or \fBnone\fR to disable the escape character entirely (making the connection transparent for binary data)\.
+.
+.TP
+\fBHostName\fR
+Specifies the real host name to log into\. This can be used to specify nicknames or abbreviations for hosts\. Arguments to \fBHostName\fR accept the tokens described in the \fITOKENS\fR section\. Numeric IP addresses are also permitted (both on the command line and in \fBHostName\fR specifications)\. The default is the name given on the command line\.
+.
+.TP
+\fBLogLevel\fR
+Gives the verbosity level that is used when logging messages from rsh(1)\. The possible values are: QUIET, FATAL, ERROR, INFO, VERBOSE, DEBUG, DEBUG1, DEBUG2, and DEBUG3\. The default is INFO\. DEBUG and DEBUG1 are equivalent\. DEBUG2 and DEBUG3 each specify higher levels of verbose output\.
+.
+.TP
+\fBPort\fR
+Specifies the port number to connect on the remote host\. The default is 80 if the protocol is http, or 443 if the protocol is https\.
+.
+.TP
+\fBProtocol\fR
+Specifies the protocol used to connect on the remote host\. The argument may be one of \fBhttp\fR or \fBhttps\fR\. The default is \fBhttps\fR\.
+.
+.TP
+\fBRemoteCommand\fR
+Specifies the command to execute on the remote host instead of a login shell\. Arguments to \fBRemoteCommand\fR accept the tokens described in the \fITOKENS\fR section\. This can also be specified with the final argument on the command line\.
+.
+.TP
+\fBRequestTTY\fR
+Specifies whether to request a pseudo\-tty for the session\. The argument may be one of: \fBno\fR (never request a TTY), \fByes\fR (always request a TTY when standard input is a TTY), \fBforce\fR (always request a TTY) or \fBauto\fR (request a TTY when opening a login session)\. This option mirrors the \fB\-t\fR and \fB\-T\fR flags for rsh(1)\.
+.
+.TP
+\fBSendEnv\fR
+Specifies what variables from the local environ(7) should be sent to the server\. Note that the TERM environment variable is always sent whenever a pseudo\-terminal is requested as it is required by the protocol\. Variables are specified by name, which may contain wildcard characters\. Multiple environment variables may be separated by whitespace or spread across multiple SendEnv directives\. The default is not to send any environment variables\.
+.
+.IP
+See \fIPATTERNS\fR for more information on patterns\.
+.
+.TP
+\fBService\fR
+Specifies the Rancher service of the container to log in to\. Arguments to \fBService\fR accept the tokens described in the \fITOKENS\fR section\. The default is the name given on the command line\.
+.
+.TP
+\fBStack\fR
+Specifies the Rancher stack of the container to log in to\. Arguments to \fBStack\fR accept the tokens described in the \fITOKENS\fR section\. The default is the name given on the command line\.
+.
+.TP
+\fBUser\fR
+Specifies the user to log in as\. This can be useful when a different user name is used on different containers\. This saves the trouble of having to remember to give the user name on the command line\.
+.
+.SH "PATTERNS"
+A pattern consists of zero or more non\-whitespace characters, \'*\' (a wildcard that matches zero or more characters), or \'?\' (a wildcard that matches exactly one character)\. For example, to specify a set of declarations for any host in the "\.co\.uk" set of domains, the following pattern could be used:
+.
+.IP "" 4
+.
+.nf
+
+Host *\.co\.uk/*
+.
+.fi
+.
+.IP "" 0
+.
+.P
+The following pattern would match any host in the 192\.168\.0\.[0\-9] network range:
+.
+.IP "" 4
+.
+.nf
+
+Host *192\.168\.0\.?/*
+.
+.fi
+.
+.IP "" 0
+.
+.P
+A pattern\-list is a comma\-separated list of patterns\. Patterns within pattern\-lists may be negated by preceding them with an exclamation mark (\'!\')\. For example, to match all hosts except production the following entry could be used:
+.
+.IP "" 4
+.
+.nf
+
+Host !*prod\.example\.com/*,*\.example\.com/*
+.
+.fi
+.
+.IP "" 0
+.
+.SH "TOKENS"
+Arguments to some keywords can make use of tokens, which are expanded at runtime:
+.
+.IP "" 4
+.
+.nf
+
+      %%    A literal \'%\'\.
+      %e    The remote environment\.
+      %h    The remote hostname\.
+      %r    The remote username\.
+      %S    The remote stack\.
+      %s    The remote service\.
+.
+.fi
+.
+.IP "" 0
+.
+.TP
+\fBEnvironment\fR
+accepts the tokens %%, %e, $S, and %s\.
+.
+.TP
+\fBHostName\fR
+accepts the tokens %%, and %h\.
+.
+.TP
+\fBRemoteCommand\fR
+accepts the tokens %%, and %r\.
+.
+.TP
+\fBStack\fR
+accepts the tokens %%, %e, $S, and %s\.
+.
+.TP
+\fBService\fR
+accepts the tokens %%, %e, $S, and %s\.
+.
+.SH "FILES"
+.
+.TP
+\fB~/\.rsh/config\fR
+This is the per\-user configuration file\. The file format and configuration options are described above\.
+.
+.TP
+\fB/etc/rsh/rsh_config\fR
+Systemwide configuration file\. The file format and configuration options are described above\.
+.
+.SH "AUTHORS"
+\fBavvoenv\fR is heavily inspired by OpenSSH, and portions of the man page have been directly copied\. It is written and maintained by the Avvo Infrastructure Team \fIinfrastructure@avvo\.com\fR\.
+.
+.SH "SEE ALSO"
+rsh(1)
