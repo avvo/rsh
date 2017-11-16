@@ -218,10 +218,12 @@ impl Client {
         service: &str,
     ) -> Result<Container, Error> {
         let index = self.index(&url)?;
-        let projects_link = index.links.get("projects").ok_or(Error::Empty)?;
+        let mut projects_link = index.links.get("projects").ok_or(Error::Empty)?.clone();
+        // workaround edge case where Rancher doesn't show any projects
+        projects_link.query_pairs_mut().append_pair("all", "true");
         debug!("Searching for environment {}", environment);
         let project = self.find_in_collection(
-            projects_link,
+            &projects_link,
             |p: &Project| &p.name == environment,
         )?;
         debug!("Searching for stack {}", stack);
