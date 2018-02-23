@@ -1,6 +1,6 @@
 [package]
 name = "rsh"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Avvo Infrastructure Team <infrastructure@avvo.com>"]
 license = "MIT"
 
