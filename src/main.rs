@@ -662,8 +662,10 @@ fn connect(
             ).forward(sink)
         });
 
-    core.run(runner).unwrap();
-    debug3!("connection closed");
+    match core.run(runner) {
+        Ok(_) => debug3!("connection closed successfully"),
+        Err(e) => debug3!("connection closed with error {:?}", e),
+    };
 
     ProgramStatus::Success
 }
