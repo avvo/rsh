@@ -332,6 +332,10 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
         option_builder.service(value.into());
     }
 
+    if let Some(value) = config.container(&host) {
+        option_builder.container(value.into());
+    }
+
     if let Some(escape_str) = matches.opt_str("e") {
         if escape_str != "none" {
             match escape_str.parse::<char>() {
@@ -429,10 +433,17 @@ fn run_with_options(options: options::Options) -> ProgramStatus {
         }
     };
 
+    let is_tty = match options.request_tty {
+        options::RequestTTY::Force => true,
+        options::RequestTTY::Auto => options.remote_command.starts_with("login -p -f "),
+        options::RequestTTY::Yes => termion::is_tty(&std::fs::File::create("/dev/stdout").unwrap()),
+        options::RequestTTY::No => false,
+    };
+
     let mut tries = 0;
     let url = options.url();
-    let container = loop {
-        match client.executeable_container(
+    let containers = loop {
+        match client.executeable_containers(
             &url,
             &options.environment,
             &options.stack,
@@ -463,10 +474,6 @@ fn run_with_options(options: options::Options) -> ProgramStatus {
                 );
 
             }
-            Err(rancher::Error::Empty) => {
-                fatal!("Couldn't find container.");
-                return ProgramStatus::Failure;
-            }
             Err(e) => {
                 fatal!("{}", e);
                 return ProgramStatus::Failure;
@@ -477,16 +484,20 @@ fn run_with_options(options: options::Options) -> ProgramStatus {
         tries += 1;
     };
 
+    if containers.len() == 0 {
+        fatal!("Couldn't find container.");
+        return ProgramStatus::Failure;
+    }
+
+    let container = match options.container {
+        options::Container::First => &containers[0],
+        options::Container::Auto if containers.len() == 1 || !is_tty => &containers[0],
+        options::Container::Menu | options::Container::Auto => prompt::user_choice(&containers).expect("failed to get container choice"),
+    };
+
     let execute_url = container.actions.get("execute").expect(
         "expected executeable container",
     );
-
-    let is_tty = match options.request_tty {
-        options::RequestTTY::Force => true,
-        options::RequestTTY::Auto => options.remote_command.starts_with("login -p -f "),
-        options::RequestTTY::Yes => termion::is_tty(&std::fs::File::create("/dev/stdout").unwrap()),
-        options::RequestTTY::No => false,
-    };
 
     let mut command_parts = Vec::new();
     let mut send_env_patterns = options.send_env;

@@ -51,6 +51,12 @@ case-insensitive and arguments are case-sensitive):
 
     See _PATTERNS_ for more information on patterns.
 
+  * `Container`:
+    Specifies how to choose the container to log in to. The argument may be one
+    of `first` (use the first executable container), `menu` (display a menu of
+    the available containers), or `auto` (display a menu only when there is
+    more than one container and a TTY is requested). The default is `first`.
+
   * `Environment`:
     Specifies the Rancher environment of the container to log in to. Arguments
     to `Environment` accept the tokens described in the _TOKENS_ section. The

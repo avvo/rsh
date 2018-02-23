@@ -2,7 +2,7 @@
 .\" generated with Ronn/v0.7.3
 .\" http://github.com/rtomayko/ronn/tree/0.7.3
 .
-.TH "RSH_CONFIG" "5" "October 2017" "" ""
+.TH "RSH_CONFIG" "5" "February 2018" "" ""
 .
 .SH "NAME"
 \fBrsh_config\fR \- rsh configuration
@@ -48,6 +48,10 @@ A pattern entry may be negated by prefixing it with an exclamation mark (\'!\')\
 .
 .IP
 See \fIPATTERNS\fR for more information on patterns\.
+.
+.TP
+\fBContainer\fR
+Specifies how to choose the container to log in to\. The argument may be one of \fBfirst\fR (use the first executable container), \fBmenu\fR (display a menu of the available containers), or \fBauto\fR (display a menu only when there is more than one container and a TTY is requested)\. The default is \fBfirst\fR\.
 .
 .TP
 \fBEnvironment\fR

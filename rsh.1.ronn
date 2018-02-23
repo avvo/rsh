@@ -64,6 +64,7 @@ shell.
     command-line flag. For full details of the options listed below, and their
     possible values, see rsh_config(5).
 
+        Container
         Environment
         EscapeChar
         HostName

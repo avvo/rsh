@@ -40,6 +40,42 @@ impl fmt::Display for BuildError {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Container {
+    First,
+    Auto,
+    Menu,
+}
+
+impl Default for Container {
+    fn default() -> Container {
+        Container::First
+    }
+}
+
+impl fmt::Display for Container {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> fmt::Result {
+        match self {
+            &Container::First => "first".fmt(fmt),
+            &Container::Auto => "auto".fmt(fmt),
+            &Container::Menu => "menu".fmt(fmt),
+        }
+    }
+}
+
+impl FromStr for Container {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_ref() {
+            "first" => Ok(Container::First),
+            "auto" => Ok(Container::Auto),
+            "menu" => Ok(Container::Menu),
+            _ => Err(ParseError),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ParseError;
 
@@ -213,6 +249,7 @@ impl FromStr for RequestTTY {
 #[derive(Default)]
 pub struct OptionsBuilder {
     tokens: HashMap<char, String>,
+    container: Container,
     environment: Option<String>,
     escape_char: Option<char>,
     host_name: Option<String>,
@@ -260,6 +297,7 @@ impl OptionsBuilder {
             &self.tokens,
         )?;
         Ok(Options {
+            container: self.container,
             environment,
             escape_char: self.escape_char,
             host_name,
@@ -277,6 +315,11 @@ impl OptionsBuilder {
 
     pub fn token<'a>(&'a mut self, token: char, replacement: String) -> &'a mut OptionsBuilder {
         self.tokens.insert(token, replacement);
+        self
+    }
+
+    pub fn container<'a>(&'a mut self, container: Container) -> &'a mut OptionsBuilder {
+        self.container = container;
         self
     }
 
@@ -377,6 +420,7 @@ pub struct Options {
     // pub canonicalize_permitted_cnames: Vec<Rule>,
     // pub connection_attempts: u16, // default 1
     // pub connect_timeout: Option<u16>,
+    pub container: Container,
     pub environment: String,
     pub escape_char: Option<char>, // -e default "~"
     pub host_name: String,
@@ -432,6 +476,7 @@ impl fmt::Display for Options {
         write!(fmt, "environment {}\n", self.environment)?;
         write!(fmt, "stack {}\n", self.stack)?;
         write!(fmt, "service {}\n", self.service)?;
+        write!(fmt, "container {}\n", self.container)?;
         match self.escape_char {
             Some(ref v) => write!(fmt, "escapechar {}\n", v)?,
             None => write!(fmt, "escapechar none\n")?,

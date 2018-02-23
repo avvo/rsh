@@ -90,7 +90,14 @@ struct Service {
 
 #[derive(Debug, Deserialize)]
 pub struct Container {
+    name: String,
     pub actions: HashMap<String, url_serde::Serde<url::Url>>,
+}
+
+impl fmt::Display for Container {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> fmt::Result {
+        self.name.fmt(fmt)
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -210,13 +217,13 @@ impl Client {
         Ok(())
     }
 
-    pub fn executeable_container(
+    pub fn executeable_containers(
         &self,
         url: &url::Url,
         environment: &str,
         stack: &str,
         service: &str,
-    ) -> Result<Container, Error> {
+    ) -> Result<Vec<Container>, Error> {
         let index = self.index(&url)?;
         let mut projects_link = index.links.get("projects").ok_or(Error::Empty)?.clone();
         // workaround edge case where Rancher doesn't show any projects
@@ -240,7 +247,7 @@ impl Client {
         )?;
         debug!("Searching for executable container");
         let instances_link = service.links.get("instances").ok_or(Error::Empty)?;
-        self.find_in_collection(instances_link, |c: &Container| {
+        self.filter_collection(instances_link, |c: &Container| {
             c.actions.get("execute").is_some()
         })
     }
@@ -266,6 +273,26 @@ impl Client {
                 }
             }
             Some(i) => Ok(collection.data.remove(i)),
+        }
+    }
+
+    fn filter_collection<F, T>(&self, url: &url::Url, cond: F) -> Result<Vec<T>, Error>
+    where
+        F: Fn(&T) -> bool,
+        T: serde::de::DeserializeOwned,
+    {
+        let collection: Result<Collection<_>, _> = self.get(url);
+        match collection {
+            Ok(v) => {
+                let mut current: Vec<_> = v.data.into_iter().filter(&cond).collect();
+                match v.pagination.and_then(|p| p.next) {
+                    Some(u) => current.extend(self.filter_collection(&u, cond)?),
+                    None => (),
+                };
+                Ok(current)
+            }
+            Err(Error::Empty) => return Ok(Vec::new()),
+            Err(e) => return Err(e),
         }
     }
 

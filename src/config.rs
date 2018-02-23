@@ -6,7 +6,7 @@ use std::ascii::AsciiExt;
 use std::io::Read;
 use std::str::FromStr;
 
-pub use options::{LogLevel, Protocol, RequestTTY};
+pub use options::{Container, LogLevel, Protocol, RequestTTY};
 use pattern;
 
 #[derive(Debug)]
@@ -53,6 +53,7 @@ macro_rules! search {
 }
 
 impl Config {
+    search!(container -> Container);
     search!(environment -> String);
     search!(escape_char -> char);
     search!(host_name -> String);
@@ -169,6 +170,7 @@ fn build_config(pairs: Vec<(&str, &str)>) -> Result<Config, Error> {
                     Err(_) => return Err(Error::OptionError(key.into(), value.into())),
                 };
             }
+            "container" => assign!(key, current.container => value),
             "environment" => assign!(key, current.environment => value),
             "escapechar" => assign!(key, current.escape_char => value),
             "hostname" => assign!(key, current.host_name => value),
@@ -200,6 +202,7 @@ fn build_config(pairs: Vec<(&str, &str)>) -> Result<Config, Error> {
 #[derive(Debug, Default)]
 struct Section {
     pattern: pattern::PatternList,
+    container: Option<Container>,
     environment: Option<String>,
     escape_char: Option<char>,
     host_name: Option<String>,

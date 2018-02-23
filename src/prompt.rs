@@ -22,3 +22,27 @@ pub fn prompt_with_default(prompt: &str, default: Option<String>) -> std::io::Re
         _ => Ok(result),
     }
 }
+
+pub fn user_choice<T: std::fmt::Display>(choices: &[T]) -> std::io::Result<&T> {
+    let mut stdout = std::io::stdout();
+    let mut i = 0;
+    write!(stdout, "Select a container:\n")?;
+    for choice in choices {
+        i += 1;
+        write!(stdout, "  {}. {}\n", i, choice)?;
+    }
+    loop {
+        write!(stdout, "> ")?;
+        stdout.flush()?;
+        let mut line = String::new();
+        std::io::stdin().read_line(&mut line)?;
+        let index = match line.trim().parse::<usize>() {
+            Ok(i) => i,
+            Err(_) => continue,
+        };
+        match choices.get(index - 1) {
+            Some(ref c) => break Ok(c),
+            None => continue,
+        }
+    }
+}
