@@ -172,7 +172,7 @@ pub struct Client {
 impl Client {
     pub fn new() -> Client {
         Client {
-            http: reqwest::Client::new().expect("failed to initalize http client"),
+            http: reqwest::Client::new(),
             api_key: None,
         }
     }
@@ -181,12 +181,12 @@ impl Client {
         let mut token_url = url.clone();
         token_url.set_path("/v2-beta/token");
         debug2!("POST {}", &token_url);
-        let mut token_request = self.http.post(token_url)?;
+        let mut token_request = self.http.post(token_url);
         let code = format!("{}:{}", user, password);
         token_request.json(&TokenRequest {
             code,
             auth_provider: String::from("ldapconfig"),
-        })?;
+        });
         let mut token_response = token_request.send()?;
         debug3!("{:?}", token_response);
         if !token_response.status().is_success() {
@@ -197,7 +197,7 @@ impl Client {
         let mut api_key_url = url.clone();
         api_key_url.set_path("/v2-beta/apikey");
         debug2!("POST {}", &api_key_url);
-        let mut api_key_request = self.http.post(api_key_url)?;
+        let mut api_key_request = self.http.post(api_key_url);
         let mut cookie = reqwest::header::Cookie::new();
         cookie.set("token", token.jwt);
         api_key_request.header(cookie);
@@ -205,7 +205,7 @@ impl Client {
             account_id: token.account_id,
             name: String::from("rsh"),
             description: String::from("Rancher SHell"),
-        })?;
+        });
         let mut api_key_response = api_key_request.send()?;
         debug3!("{:?}", api_key_response);
         if !api_key_response.status().is_success() {
@@ -301,7 +301,7 @@ impl Client {
         T: serde::de::DeserializeOwned,
     {
         debug2!("GET {}", url);
-        let mut request = self.http.get(url.clone())?;
+        let mut request = self.http.get(url.clone());
         match self.api_key {
             Some(ref a) => {
                 debug3!("Request Using Rancher API key {}", a.public_value);
@@ -324,8 +324,8 @@ impl Client {
         U: serde::de::DeserializeOwned,
     {
         debug2!("POST {}", url);
-        let mut request = self.http.post(url.clone())?;
-        request.json(body)?;
+        let mut request = self.http.post(url.clone());
+        request.json(body);
         match self.api_key {
             Some(ref a) => {
                 debug3!("Request Using Rancher API key {}", a.public_value);

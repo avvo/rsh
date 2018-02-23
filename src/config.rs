@@ -2,7 +2,6 @@ use std;
 
 extern crate nom;
 
-use std::ascii::AsciiExt;
 use std::io::Read;
 use std::str::FromStr;
 

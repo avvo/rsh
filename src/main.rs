@@ -21,7 +21,6 @@ use futures::future::Future;
 use futures::sink::Sink;
 use futures::stream::Stream;
 
-use std::ascii::AsciiExt;
 use std::io::{Read, Write};
 use termion::raw::IntoRawMode;
 
