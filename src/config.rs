@@ -14,7 +14,6 @@ pub enum Error {
     OptionError(String, String),
     OptionNotAllowed(String),
     ParseError(nom::ErrorKind),
-    UnexpectedEnd,
     UnknownOption(String),
 }
 
@@ -76,12 +75,11 @@ impl Config {
         let mut parsed = Vec::new();
         for opt in options {
             match pair(&opt) {
-                nom::IResult::Done(_, (key, _)) if key.eq_ignore_ascii_case("host") => {
+                Ok((_, (key, _))) if key.eq_ignore_ascii_case("host") => {
                     return Err(Error::OptionNotAllowed(key.into()))
                 }
-                nom::IResult::Done(_, pair) => parsed.push(pair),
-                nom::IResult::Error(e) => return Err(Error::from(e)),
-                nom::IResult::Incomplete(_) => return Err(Error::UnexpectedEnd),
+                Ok((_, pair)) => parsed.push(pair),
+                Err(e) => return Err(Error::from(e.into_error_kind())),
             };
         }
         build_config(parsed)
@@ -104,9 +102,8 @@ impl FromStr for Config {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match config_file(s) {
-            nom::IResult::Done(_, pairs) => build_config(pairs),
-            nom::IResult::Error(e) => Err(Error::from(e)),
-            nom::IResult::Incomplete(_) => Err(Error::UnexpectedEnd),
+            Ok((_, pairs)) => build_config(pairs),
+            Err(e) => Err(Error::from(e.into_error_kind())),
         }
     }
 }
@@ -239,7 +236,7 @@ named!(pairs(&str) -> Vec<(&str, &str)>, many0!(do_parse!(
 
 named!(pair(&str) -> (&str, &str), do_parse!(
     key: call!(nom::alphanumeric) >>
-    alt!(tag_s!(" ") | tag_s!("=")) >>
+    alt!(tag!(" ") | tag!("=")) >>
     val: opt!(value) >>
     (key, val.unwrap_or(""))
 ));
@@ -247,12 +244,12 @@ named!(pair(&str) -> (&str, &str), do_parse!(
 named!(blank(&str) -> Vec<&str>, many0!(alt!(comment | call!(nom::multispace))));
 
 named!(comment(&str) -> &str, do_parse!(
-    tag_s!("#") >>
+    tag!("#") >>
     comment: call!(nom::not_line_ending) >>
     (comment)
 ));
 
 named!(value(&str) -> &str, alt!(
-    delimited!(tag_s!("\""), take_until_s!("\""), tag_s!("\"")) |
+    delimited!(tag!("\""), take_until!("\""), tag!("\"")) |
     call!(nom::not_line_ending)
 ));
