@@ -2,6 +2,8 @@ use std;
 
 extern crate nom;
 
+use nom::types::CompleteStr;
+
 use std::io::Read;
 use std::str::FromStr;
 
@@ -74,11 +76,11 @@ impl Config {
     pub fn try_from(options: Vec<&str>) -> Result<Config, Error> {
         let mut parsed = Vec::new();
         for opt in options {
-            match pair(&opt) {
-                Ok((_, (key, _))) if key.eq_ignore_ascii_case("host") => {
+            match pair(CompleteStr(&opt)) {
+                Ok((_, (CompleteStr(key), _))) if key.eq_ignore_ascii_case("host") => {
                     return Err(Error::OptionNotAllowed(key.into()))
                 }
-                Ok((_, pair)) => parsed.push(pair),
+                Ok((_, (key, value))) => parsed.push((*key, *value)),
                 Err(e) => return Err(Error::from(e.into_error_kind())),
             };
         }
@@ -101,8 +103,8 @@ impl FromStr for Config {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match config_file(s) {
-            Ok((_, pairs)) => build_config(pairs),
+        match config_file(CompleteStr(s)) {
+            Ok((_, pairs)) => build_config(pairs.into_iter().map(|(k, v)| (*k, *v)).collect()),
             Err(e) => Err(Error::from(e.into_error_kind())),
         }
     }
@@ -221,35 +223,35 @@ impl Section {
     }
 }
 
-named!(config_file(&str) -> Vec<(&str, &str)>, do_parse!(
+named!(config_file(CompleteStr) -> Vec<(CompleteStr, CompleteStr)>, do_parse!(
     res: call!(pairs) >>
     eof!() >>
     (res)
 ));
 
-named!(pairs(&str) -> Vec<(&str, &str)>, many0!(do_parse!(
+named!(pairs(CompleteStr) -> Vec<(CompleteStr, CompleteStr)>, many0!(do_parse!(
     blank >>
     pair: call!(pair) >>
     blank >>
     (pair)
 )));
 
-named!(pair(&str) -> (&str, &str), do_parse!(
+named!(pair(CompleteStr) -> (CompleteStr, CompleteStr), do_parse!(
     key: call!(nom::alphanumeric) >>
     alt!(tag!(" ") | tag!("=")) >>
     val: opt!(value) >>
-    (key, val.unwrap_or(""))
+    (key, val.unwrap_or(CompleteStr("")))
 ));
 
-named!(blank(&str) -> Vec<&str>, many0!(alt!(comment | call!(nom::multispace))));
+named!(blank(CompleteStr) -> Vec<CompleteStr>, many0!(alt!(comment | call!(nom::multispace))));
 
-named!(comment(&str) -> &str, do_parse!(
+named!(comment(CompleteStr) -> CompleteStr, do_parse!(
     tag!("#") >>
     comment: call!(nom::not_line_ending) >>
     (comment)
 ));
 
-named!(value(&str) -> &str, alt!(
+named!(value(CompleteStr) -> CompleteStr, alt!(
     delimited!(tag!("\""), take_until!("\""), tag!("\"")) |
     call!(nom::not_line_ending)
 ));
