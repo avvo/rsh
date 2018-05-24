@@ -224,6 +224,31 @@ impl Client {
         stack: &str,
         service: &str,
     ) -> Result<Vec<Container>, Error> {
+        self.filter_containers(url, environment, stack, service, |c| {
+            c.actions.get("execute").is_some()
+        })
+    }
+
+    pub fn logging_containers(
+        &self,
+        url: &url::Url,
+        environment: &str,
+        stack: &str,
+        service: &str,
+    ) -> Result<Vec<Container>, Error> {
+        self.filter_containers(url, environment, stack, service, |c| {
+            c.actions.get("logs").is_some()
+        })
+    }
+
+    fn filter_containers(
+        &self,
+        url: &url::Url,
+        environment: &str,
+        stack: &str,
+        service: &str,
+        filter: impl Fn(&Container) -> bool,
+    ) -> Result<Vec<Container>, Error> {
         let index = self.index(&url)?;
         let mut projects_link = index.links.get("projects").ok_or(Error::Empty)?.clone();
         // workaround edge case where Rancher doesn't show any projects
@@ -247,9 +272,7 @@ impl Client {
         )?;
         debug!("Searching for executable container");
         let instances_link = service.links.get("instances").ok_or(Error::Empty)?;
-        self.filter_collection(instances_link, |c: &Container| {
-            c.actions.get("execute").is_some()
-        })
+        self.filter_collection(instances_link, filter)
     }
 
     fn index(&self, url: &url::Url) -> Result<Index, Error> {
@@ -340,5 +363,19 @@ impl Client {
         };
 
         Ok(response.json()?)
+    }
+}
+
+pub struct Manager {
+    clients: HashMap<String, (Client, usize)>,
+}
+
+impl Manager {
+    pub fn new() -> Manager {
+        Manager { clients: HashMap::new() }
+    }
+
+    pub fn get(&mut self, host_port: String) -> &mut (Client, usize) {
+        self.clients.entry(host_port).or_insert_with(|| (Client::new(), 0))
     }
 }
