@@ -1,17 +1,9 @@
-#[macro_use]
 extern crate actix;
 extern crate actix_web;
 extern crate base64;
 extern crate futures;
 extern crate getopts;
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate nom;
-extern crate nix;
 extern crate rpassword;
-#[macro_use]
-extern crate serde_derive;
 extern crate serde_json;
 extern crate shell_escape;
 extern crate termion;
@@ -25,15 +17,8 @@ use std::io::{Read, Write};
 use termion::raw::IntoRawMode;
 
 #[macro_use]
-mod log;
-
-mod config;
-mod escape;
-mod handler;
-mod options;
-mod pattern;
-mod prompt;
-mod rancher;
+extern crate rsh;
+use rsh::*;
 
 use prompt::prompt_with_default;
 use rancher::{ContainerExec, HostAccess};
