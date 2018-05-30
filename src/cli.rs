@@ -334,7 +334,7 @@ pub fn options_for_host(matches: &getopts::Matches, config: &Config, host: &str)
     Ok(options)
 }
 
-pub fn get_containers(manager: &mut rancher::Manager, options: &options::Options) -> Result<Vec<rancher::Container>, ProgramStatus> {
+pub fn get_containers(manager: &mut rancher::Manager, options: &options::Options, filter: impl Clone + Fn(&rancher::Container) -> bool) -> Result<Vec<rancher::Container>, ProgramStatus> {
     let (ref mut client, ref mut tries) = manager.get(options.host_with_port().to_owned());
 
     let api_key_path = config::api_key_path(&options.host_with_port());
@@ -363,11 +363,12 @@ pub fn get_containers(manager: &mut rancher::Manager, options: &options::Options
 
     let url = options.url();
     let containers = loop {
-        match client.executeable_containers(
+        match client.filter_containers(
             &url,
             &options.environment,
             &options.stack,
             &options.service,
+            filter.clone(),
         ) {
             Ok(v) => break v,
             Err(rancher::Error::Unauthorized) if *tries == 0 => {

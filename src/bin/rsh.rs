@@ -113,7 +113,7 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
 
 fn run_with_options(options: options::Options) -> ProgramStatus {
     let mut manager = rancher::Manager::new();
-    let containers = match cli::get_containers(&mut manager, &options) {
+    let containers = match cli::get_containers(&mut manager, &options, |c| c.actions.get("execute").is_some()) {
         Ok(v) => v,
         Err(s) => return s,
     };

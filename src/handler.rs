@@ -1,5 +1,5 @@
 use std;
-use std::io::{Read, Write};
+use std::io::{Read as IoRead, Write};
 
 use actix::{self, Actor, StreamHandler};
 use actix_web::ws;
@@ -128,4 +128,47 @@ Supported escape sequences:\r
             }
         }
     });
+}
+
+
+// ---
+
+
+pub struct Read {
+    stdout: std::io::Stdout,
+    writer: ws::ClientWriter,
+}
+
+impl Read {
+    pub fn start(reader: ws::ClientReader, writer: ws::ClientWriter) -> actix::Addr<actix::Syn, Read> {
+        Read::create(|ctx| {
+            Read::add_stream(reader, ctx);
+            let stdout = std::io::stdout();
+            Read { stdout, writer }
+        })
+    }
+}
+
+impl actix::Actor for Read {
+    type Context = actix::Context<Self>;
+}
+
+impl actix::StreamHandler<ws::Message, ws::ProtocolError> for Read {
+    fn handle(&mut self, msg: ws::Message, _ctx: &mut actix::Context<Self>) {
+        match msg {
+            ws::Message::Text(txt) => {
+                self.stdout
+                    .write(txt.as_bytes())
+                    .unwrap();
+                self.stdout.flush().unwrap();
+            }
+            ws::Message::Binary(_) => panic!("unexpected binary message"),
+            ws::Message::Ping(txt) => self.writer.pong(&txt),
+            ws::Message::Pong(txt) => debug3!("recieved pong {:?}", txt),
+            ws::Message::Close(reason) => {
+                actix::Arbiter::system().do_send(actix::msgs::SystemExit(0));
+                debug3!("closing {:?}", reason)
+            }
+        }
+    }
 }

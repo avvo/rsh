@@ -1,8 +1,14 @@
+extern crate actix;
+extern crate actix_web;
+extern crate futures;
 extern crate getopts;
 #[macro_use]
 extern crate rsh;
+extern crate url;
 
-use rsh::{*, cli::ProgramStatus, options::Options};
+use actix_web::ws;
+use futures::future::Future;
+use rsh::{*, cli::ProgramStatus, options::Options, rancher::{ContainerLogs, HostAccess}};
 
 fn main() {
     let mut opts = getopts::Options::new();
@@ -10,7 +16,7 @@ fn main() {
     opts.optflag("V", "version", "Display the version number and exit");
 
     opts.optflag("f", "", "Do not stop at end of file, wait for additional data");
-    opts.optflag("F", "", "Detect new containers, implies -f");
+    // opts.optflag("F", "", "Detect new containers, implies -f");
     opts.optopt("n", "", "Number of lines", "NUMBER");
     opts.optflag("q", "", "Suppress printing headers for multiple containers");
 
@@ -72,29 +78,68 @@ fn run(matches: getopts::Matches) -> ProgramStatus {
         cli::options_for_host(&matches, &config, &host)
     }).collect();
 
-    let options = match result {
+    let all_options = match result {
         Ok(v) => v,
         Err(s) => return s,
     };
 
-    if options.is_empty() {
+    if all_options.is_empty() {
         return ProgramStatus::FailureWithHelp;
     };
 
     verbose!("rtail {}", VERSION);
 
     if matches.opt_present("G") {
-        print!("{}", options.iter().map(Options::to_string).collect::<Vec<_>>().join("\n"));
+        print!("{}", all_options.iter().map(Options::to_string).collect::<Vec<_>>().join("\n"));
         return ProgramStatus::Success;
     }
 
     // handle q
 
-    // find each service in rancher
+    let sys = actix::System::new("rtail");
 
-    // setup connections
+    let mut failure = false;
+    let mut manager = rancher::Manager::new();
+    let mut addrs = Vec::new();
+    for options in all_options {
+        let containers = cli::get_containers(&mut manager, &options, |c| c.actions.get("logs").is_some()).unwrap_or_else(|_| Vec::new());
+        if containers.len() == 0 {
+            error!("rtail: {}: No such container", options.url());
+            failure = true;
+        }
+        for c in containers.into_iter() {
+            let (client, _) = manager.get(options.host_with_port().to_owned());
+            let url = c.actions.get("logs").unwrap();
+            let host_access: HostAccess = client.post(url, &ContainerLogs::new(true, 10)).expect("logs failed");
+            addrs.push(connect(host_access.authed_url()));
+        }
+    }
 
-    // runloop
+    match sys.run() {
+        0 if failure => {
+            debug2!("connection closed successfully");
+            ProgramStatus::Failure
+        }
+        0 => {
+            debug2!("connection closed successfully");
+            ProgramStatus::Success
+        }
+        i => {
+            debug2!("connection closed with error {:?}", i);
+            ProgramStatus::Failure
+        }
+    }
+}
 
-    ProgramStatus::Success
+fn connect(websocket_url: url::Url) {
+    let client = ws::Client::new(websocket_url)
+        .connect()
+        .map_err(|e| {
+            debug3!("{:?}\r", e);
+            actix::Arbiter::system().do_send(actix::msgs::SystemExit(1));
+        })
+        .map(move |(reader, writer)| {
+            handler::Read::start(reader, writer);
+        });
+    actix::Arbiter::handle().spawn(client);
 }

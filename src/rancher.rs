@@ -149,6 +149,18 @@ impl ContainerExec {
     }
 }
 
+#[derive(Debug, Serialize)]
+pub struct ContainerLogs {
+    follow: bool,
+    lines: usize,
+}
+
+impl ContainerLogs {
+    pub fn new(follow: bool, lines: usize) -> ContainerLogs {
+        ContainerLogs { follow, lines }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct HostAccess {
     token: String,
@@ -217,31 +229,7 @@ impl Client {
         Ok(())
     }
 
-    pub fn executeable_containers(
-        &self,
-        url: &url::Url,
-        environment: &str,
-        stack: &str,
-        service: &str,
-    ) -> Result<Vec<Container>, Error> {
-        self.filter_containers(url, environment, stack, service, |c| {
-            c.actions.get("execute").is_some()
-        })
-    }
-
-    pub fn logging_containers(
-        &self,
-        url: &url::Url,
-        environment: &str,
-        stack: &str,
-        service: &str,
-    ) -> Result<Vec<Container>, Error> {
-        self.filter_containers(url, environment, stack, service, |c| {
-            c.actions.get("logs").is_some()
-        })
-    }
-
-    fn filter_containers(
+    pub fn filter_containers(
         &self,
         url: &url::Url,
         environment: &str,
